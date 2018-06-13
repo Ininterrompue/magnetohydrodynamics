@@ -3,7 +3,7 @@ from matplotlib import pyplot
 from scipy.sparse import dia_matrix
 from scipy.linalg import eig
 
-nr = 2 + 200
+nr = 2 + 100
 r_max = 5.0
 dr = r_max/(nr - 2)
 r = numpy.linspace(-dr/2, r_max + dr/2, nr)
@@ -32,8 +32,8 @@ B_0 = numpy.sign(B2)*numpy.sqrt(numpy.abs(B2))
 J_0 = (dv @ (rr*B_0))/rr
 
 pyplot.plot(r[1: -1], B_0[1: -1], 
-			r[1: -1], rho_0[1: -1], 
-			r[1: -1], J_0[1: -1])
+            r[1: -1], rho_0[1: -1],
+            r[1: -1], J_0[1: -1])
 pyplot.show()
 
 ##
@@ -113,49 +113,53 @@ plot_eigenvalues(evals, evects)
 
 # ith mode by magnitude of imaginary part
 def plot_mode(i, evals, evects):
-	evals = -1j*evals
-	index = numpy.argsort(evals)
-	evals = evals[index]
+    index = numpy.argsort(evals.imag)
 
-	i_0 = -8 - i
-	omega = evals[i_0]
-	v_omega = evects[:, i_0]
-	print(numpy.angle(v_omega))
-	f = pyplot.figure()
-	f.suptitle(omega)
-	
-	ax = pyplot.subplot(2,2,1)
-	ax.set_title("rho")
-	rho = v_omega[0: nr]
-	ax.plot(r[1: -1], numpy.real(rho[1: -1]),
-            r[1: -1], numpy.imag(rho[1: -1]) ) 
+    omega = evals[index[i]]
+    v_omega = evects[:, index[i]]
+
+    f = pyplot.figure()
+    f.suptitle(omega)
+
+    # def f1(x): return numpy.abs(x)
+    # def f2(x): return numpy.unwrap(numpy.angle(x)) / (2*3.14159)
+    def f1(x): return numpy.real(x)
+    def f2(x): return numpy.imag(x)
+
+    ax = pyplot.subplot(2,2,1)
+    ax.set_title("rho")
+    rho = v_omega[0: nr]
+    t = numpy.exp(-1j*numpy.angle(rho[0]))
+    ax.plot(r[1: -1], f1(t*rho[1: -1]),
+            r[1: -1], f2(t*rho[1: -1]) )
               
-	ax = pyplot.subplot(2,2,2)
-	ax.set_title("B_theta")
-	B = v_omega[nr: 2*nr]
-	ax.plot(r[1: -1], numpy.real(B[1: -1]),
-            r[1: -1], numpy.imag(B[1: -1]) )
+    ax = pyplot.subplot(2,2,2)
+    ax.set_title("B_theta")
+    B = v_omega[nr: 2*nr]
+    ax.plot(r[1: -1], f1(t*B[1: -1]),
+            r[1: -1], f2(t*B[1: -1]) )
             
-	ax = pyplot.subplot(2,2,3)
-	ax.set_title("V_r")
-	V_r = v_omega[2*nr: 3*nr]
-	ax.plot(r[1: -1], numpy.real(V_r[1: -1]),
-            r[1: -1], numpy.imag(V_r[1: -1]) )
+    ax = pyplot.subplot(2,2,3)
+    ax.set_title("V_r")
+    V_r = v_omega[2*nr: 3*nr]
+    ax.plot(r[1: -1], f1(t*V_r[1: -1]),
+            r[1: -1], f2(t*V_r[1: -1]) )
             
-	ax = pyplot.subplot(2,2,4)
-	ax.set_title("V_z")	
-	V_z = v_omega[3*nr: 4*nr]
-	ax.plot(r[1: -1], numpy.real(V_z[1: -1]),
-            r[1: -1], numpy.imag(V_z[1: -1]) )
+    ax = pyplot.subplot(2,2,4)
+    ax.set_title("V_z")
+    V_z = v_omega[3*nr: 4*nr]
+    ax.plot(r[1: -1], f1(t*V_z[1: -1]),
+            r[1: -1], f2(t*V_z[1: -1]) )
 
-	pyplot.show()
+    pyplot.show()
 
 # for jj in range(4*nr):
 #    plot_mode(jj, evals, evects)
 
-plot_mode(2, evals, evects)
+plot_mode(-1, evals, evects)
 
 ##
-'''pyplot.figure()
-pyplot.imshow(numpy.abs(evects.real)**.5)
-pyplot.show()'''
+pyplot.figure()
+pyplot.imshow(numpy.real(evects))
+pyplot.show()
+
