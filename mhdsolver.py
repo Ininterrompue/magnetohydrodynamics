@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 class MHDSystem:
@@ -90,3 +91,47 @@ class FDSystem:
         dv[-1, :] = 0
         return dv
 
+##
+class MHDPerturbation:
+	def __init__(self, sys, p, k=1):
+		self.sys = sys
+		self.p = p
+		self.rho = self.sys.solve_eos(self.p)
+		self.rho1 = rho1
+		self.B1 = B1
+		self.Vr1 = Vr1
+		self.Vz1 = Vz1
+		self.k = k
+		
+	def create_M(self):
+		
+		m3 = 1j/self.sys.grid.r*DV_product(self.sys.grid.r*rho_0)
+		m4 = numpy.diagflat(-k*rho_0, 0)
+		m7 = 1j*DV_product(B_0)
+		m8 = numpy.diagflat(-k*B_0, 0)
+		m9 = 2j/(rho_0)*dv
+		m10 = 1j/(4*numpy.pi*rho_0*rr**2)*DV_product(rr**2*B_0)
+		m13 = numpy.diagflat(-2.0*k/rho_0, 0)
+		m14 = numpy.diagflat(-k*B_0/(4.0*numpy.pi*rho_0), 0)				
+		
+		
+		M = numpy.block([[m1, m0, m3, m4], 
+						[m0, m6, m7, m8], 
+						[m9, m10, m11, m0], 
+						[m13, m14, m0, m16]])
+		return M
+		
+
+class Eigensystem:
+	def __init__(self, sys):
+		self.sys = sys
+	
+	def plot_eigenvalues(self, evals):
+		plt.scatter(evals.real, evals.imag, s=1)
+    	plt.title('Omega')
+    	plt.xlabel('Re')
+    	plt.ylabel('Im')
+    	plt.show()
+		
+	
+	
