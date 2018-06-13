@@ -16,7 +16,7 @@ class Grid:
         # set up grid, with ghost cells
         N = 2 * N_ghost + N_r
         dr = r_max / N_r
-        r = np.reshape(np.linspace(-dr / 2, r_max + dr / 2, N), (N, 1))
+        r = np.linspace(-dr / 2, r_max + dr / 2, N)
         self.r = r
         self.N = N
         self.dr = dr
@@ -64,7 +64,9 @@ class MHDEquilibrium:
 
     def compute_j_from_b(self):
         dv = self.sys.fd.ddr_product(self.sys.grid.r)
-        J = (1 / self.sys.grid.r) * (dv @ self.B)
+        # dv = self.sys.fd.ddr()
+        # J = (1 / self.sys.grid.r) * (dv @ (self.sys.grid.r * self.B) )
+        J = (1 / self.sys.grid.r) * (dv @ (self.B) )
         return J
 
 
@@ -82,7 +84,7 @@ class FDSystem:
         return dv
 
     def ddr_product(self, vec):
-        dv = (np.diag(vec[:-1], 1) - np.diag(vec[1:], -1))/(2 * self.grid.dr)
+        dv = (np.diag(vec[1:], 1) - np.diag(vec[:-1], -1))/(2 * self.grid.dr)
         # set rows corresponding to BC equations to zero
         dv[0, :] = 0
         dv[-1, :] = 0
