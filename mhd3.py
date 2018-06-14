@@ -11,28 +11,33 @@ def grid(size=10, max=1):
 	xx = np.reshape(x, (nx, 1))
 	return nx, max, dx, x, xx
 
-nr, r_max, dr, r, rr = grid(size=100, max=3.0)
+nr, r_max, dr, r, rr = grid(size=50, max=5.0)
 P = np.exp(-rr**4) + 0.05
 
-def FD_matrix():
+def FD_matrix(nr, dr):
     one = np.ones(nr)
     dv = (dia_matrix((one, 1), shape=(nr, nr)) - dia_matrix((one, -1), shape=(nr, nr))).toarray()/(2*dr)
     return dv
 
-dv = FD_matrix()
-op = dv/2 + dia_matrix((1.0/r, 0), shape=(nr, nr)).toarray()
-op[0, 1] = -op[0, 0]
-op[nr - 1, nr - 2] = -op[nr - 1, nr - 1]
+dv = FD_matrix(nr, dr)
 
-rhs = -dv @ P
-rhs[-1] = 0
-rhs[0] = 0
+def equilibrium(dv, r, rr, nr, P):
+	op = dv/2 + dia_matrix((1.0/r, 0), shape=(nr, nr)).toarray()
+	op[0, 1] = -op[0, 0]
+	op[nr - 1, nr - 2] = -op[nr - 1, nr - 1]
 
-# Equilibrium rho and B. Mass of ion set to unity.
-rho_0 = P/2.0
-B2 = np.linalg.solve(op, rhs)
-B_0 = np.sign(B2)*np.sqrt(np.abs(B2))
-J_0 = (dv @ (rr*B_0))/rr
+	rhs = -dv @ P
+	rhs[-1] = 0
+	rhs[0] = 0
+
+	# Equilibrium rho and B. Mass of ion set to unity.
+	rho_0 = P/2.0
+	B2 = np.linalg.solve(op, rhs)
+	B_0 = np.sign(B2)*np.sqrt(np.abs(B2))
+	J_0 = (dv @ (rr*B_0))/rr
+	return rho_0, B_0, J_0
+	
+rho_0, B_0, J_0 = equilibrium(dv, r, rr, nr, P)
 
 '''plt.plot(r[1: -1], B_0[1: -1], 
 			r[1: -1], rho_0[1: -1], 
@@ -43,21 +48,25 @@ def DV_product(vec):
     return (np.diagflat(vec[1:], 1) - np.diagflat(vec[:-1], -1))/(2*dr)
 
 # Generalized eigenvalue problem matrix
-G = np.identity(4*nr)
-G[0, 0] = G[nr - 1, nr - 1] = G[nr, nr] = G[2*nr - 1, 2*nr - 1] = 0
-G[2*nr, 2*nr] = G[3*nr - 1, 3*nr - 1] = G[3*nr, 3*nr] = G[-1, -1] = 0
+def create_G(nr):
+	G = np.identity(4*nr)
+	G[0, 0] = G[nr - 1, nr - 1] = G[nr, nr] = G[2*nr - 1, 2*nr - 1] = 0
+	G[2*nr, 2*nr] = G[3*nr - 1, 3*nr - 1] = G[3*nr, 3*nr] = G[-1, -1] = 0
+	return G
+
+G = create_G(nr)
 
 def zero_out(M):
     M[0, :] = 0
     M[-1, :] = 0
     return M
 
-k = 1
+k = 10
 nz, z_max, dz, z, zz = grid(size=20, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 
 # 0: f = 0. 1: f' = 0.
-def BC(m, bc_begin, bc_end):
+def BC(m, nr, bc_begin, bc_end):
     if bc_begin == 0:
         m[0, 0] = 1
         m[0, 1] = 1
@@ -90,11 +99,13 @@ def create_M(rr, nr, rho_0, B_0, dv, k, zero_out, BC, DV_product):
 	m6 = np.zeros((nr, nr))
 	m11 = np.zeros((nr, nr))
 	m16 = np.zeros((nr, nr))
-	m1 = BC(m1, 1, 0)
-	m6 = BC(m6, 0, 1)
-	m11 = BC(m11, 0, 1)
-	m16 = BC(m16, 1, 0)
-
+	
+	# BOUNDARY CONDITIONS 
+	m1 = BC(m1, nr, 1, 0)
+	m6 = BC(m6, nr, 0, 1)
+	m11 = BC(m11, nr, 0, 1)
+	m16 = BC(m16, nr, 1, 0)
+	
 	M = np.block([[m1, m0, m3, m4], 
 				[m0, m6, m7, m8], 
 				[m9, m10, m11, m0], 
@@ -103,7 +114,7 @@ def create_M(rr, nr, rho_0, B_0, dv, k, zero_out, BC, DV_product):
 
 k_min = 0
 k_max = 10
-dk = 0.1
+dk = 0.5
 nk = 1 + (k_max - k_min)/dk
 kk = np.linspace(k_min, k_max, nk)
 
@@ -111,8 +122,8 @@ def gamma_vs_k(G, rr, nr, rho_0, B_0, dv, kk, zero_out, BC, DV_product):
 	gamma = []
 	for K in kk: 
 		M = create_M(rr, nr, rho_0, B_0, dv, K, zero_out, BC, DV_product)
-		evals = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
-		gamma.append(evals.imag)
+		eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
+		gamma.append(eval.imag)
 
 	plt.plot(kk, gamma)
 	plt.title('Largest mode')
@@ -120,8 +131,33 @@ def gamma_vs_k(G, rr, nr, rho_0, B_0, dv, kk, zero_out, BC, DV_product):
 	plt.ylabel('gamma')
 	plt.show()
 	
-#gamma_vs_k(G, rr, nr, rho_0, B_0, dv, kk, zero_out, BC, DV_product)
+gamma_vs_k(G, rr, nr, rho_0, B_0, dv, kk, zero_out, BC, DV_product)
 
+res_min = 50
+res_max = 100
+d_res = 25
+n_res = 1 + (res_max - res_min)/d_res
+res = np.linspace(res_min, res_max, n_res)
+
+def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G):
+	gamma = []
+	for i_res in res:
+		nr2, r_max2, dr2, r2, rr2 = grid(size=int(i_res), max=5.0)
+		P = np.exp(-rr2**4) + 0.05
+		dv = FD_matrix(nr2, dr2)
+		rho_0, B_0, J_0 = equilibrium(dv, r2, rr2, nr2, P)
+		M = create_M(rr2, nr2, rho_0, B_0, dv, 1, zero_out, BC, DV_product)
+		G = create_G(nr2)
+		eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
+		gamma.append(eval.imag)
+	
+	plt.plot(res, gamma)
+	plt.title('Resolution convergence of gamma')
+	plt.xlabel('Resolution')
+	plt.ylabel('gamma')
+	plt.show()
+	
+convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
 ##
 M = create_M(rr, nr, rho_0, B_0, dv, k, zero_out, BC, DV_product)
 
@@ -149,6 +185,7 @@ def plot_mode(i):
 	index = np.argsort(evals.imag)
 	omega = evals[index[i_0]]
 	v_omega = evecs[:, index[i_0]]
+	gamma = omega.imag
 	
 	rho = v_omega[0: nr]
 	B_theta = v_omega[nr: 2*nr]
@@ -182,10 +219,12 @@ def plot_mode(i):
 
 	plt.show()
 	
-	rho_contour = rho_0[1: -1].T + f1(z_osc[1: -1] * phase * rho[1: -1])
-	B_theta_contour = B_0[1: -1].T + f1(z_osc[1: -1] * phase * B_theta[1: -1])
-	V_r_contour = f1(z_osc[1: -1] * phase * V_r[1: -1])
-	V_z_contour = f1(z_osc[1: -1] * phase * V_z[1: -1])
+	epsilon = 1
+	t = 0
+	rho_contour = rho_0[1: -1].T + epsilon * f1(z_osc[1: -1] * phase * rho[1: -1]) * np.exp(gamma * t)
+	B_theta_contour = B_0[1: -1].T + epsilon * f1(z_osc[1: -1] * phase * B_theta[1: -1]) * np.exp(gamma * t)
+	V_r_contour = epsilon * f1(z_osc[1: -1] * phase * V_r[1: -1]) * np.exp(gamma * t)
+	V_z_contour = epsilon * f1(z_osc[1: -1] * phase * V_z[1: -1]) * np.exp(gamma * t)
 	
 	# 2D contour plots
 	f = plt.figure()
