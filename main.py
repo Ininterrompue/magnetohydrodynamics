@@ -9,6 +9,3 @@ equ = MHDEquilibrium(sys, pressure)
 plt.plot(sys.grid.r, equ.p, sys.grid.r, equ.B, sys.grid.r, equ.J)
 plt.show()
 
-'''pert = MHDPerturbation(sys, pressure)
-pert.plot_eigenvalues()
-pert.plot_parameters()'''
