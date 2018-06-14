@@ -3,8 +3,8 @@ from matplotlib import pyplot
 from scipy.sparse import dia_matrix
 from scipy.linalg import eig
 
-nr = 2 + 100
-r_max = 5.0
+nr = 2 + 200
+r_max = 10.0
 dr = r_max/(nr - 2)
 r = numpy.linspace(-dr/2, r_max + dr/2, nr)
 rr = numpy.reshape(numpy.linspace(-dr/2, r_max + dr/2, nr), (nr, 1))
@@ -49,7 +49,7 @@ def zero_out(M):
     return M
 
 # Generalized eigenvalue problem matrix
-G = numpy.identity(4*nr)
+G = -numpy.identity(4*nr)
 G[0, 0] = G[nr - 1, nr - 1] = G[nr, nr] = G[2*nr - 1, 2*nr - 1] = 0
 G[2*nr, 2*nr] = G[3*nr - 1, 3*nr - 1] = G[3*nr, 3*nr] = G[-1, -1] = 0
 
@@ -158,8 +158,8 @@ def plot_mode(i, evals, evects):
 
 plot_mode(-1, evals, evects)
 
-##
-pyplot.figure()
-pyplot.imshow(numpy.real(evects))
-pyplot.show()
+# ##
+# pyplot.figure()
+# pyplot.imshow(numpy.real(evects))
+# pyplot.show()
 
