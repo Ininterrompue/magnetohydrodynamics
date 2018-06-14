@@ -11,17 +11,15 @@ def grid(size=10, max=1):
 	xx = np.reshape(x, (nx, 1))
 	return nx, max, dx, x, xx
 
-nr, r_max, dr, r, rr = grid(size=50, max=5.0)
-P = np.exp(-rr**4) + 0.05
 
 def FD_matrix(nr, dr):
     one = np.ones(nr)
     dv = (dia_matrix((one, 1), shape=(nr, nr)) - dia_matrix((one, -1), shape=(nr, nr))).toarray()/(2*dr)
     return dv
 
-dv = FD_matrix(nr, dr)
 
-def equilibrium(dv, r, rr, nr, P):
+def equilibrium(dv, r, rr, nr):
+	P = np.exp(-rr**4) + 0.05
 	op = dv/2 + dia_matrix((1.0/r, 0), shape=(nr, nr)).toarray()
 	op[0, 1] = -op[0, 0]
 	op[nr - 1, nr - 2] = -op[nr - 1, nr - 1]
@@ -36,16 +34,11 @@ def equilibrium(dv, r, rr, nr, P):
 	B_0 = np.sign(B2)*np.sqrt(np.abs(B2))
 	J_0 = (dv @ (rr*B_0))/rr
 	return rho_0, B_0, J_0
-	
-rho_0, B_0, J_0 = equilibrium(dv, r, rr, nr, P)
 
-'''plt.plot(r[1: -1], B_0[1: -1], 
-			r[1: -1], rho_0[1: -1], 
-			r[1: -1], J_0[1: -1])
-plt.show()'''
 
-def DV_product(vec):
+def DV_product(vec, dr):
     return (np.diagflat(vec[1:], 1) - np.diagflat(vec[:-1], -1))/(2*dr)
+
 
 # Generalized eigenvalue problem matrix
 def create_G(nr):
@@ -54,16 +47,12 @@ def create_G(nr):
 	G[2*nr, 2*nr] = G[3*nr - 1, 3*nr - 1] = G[3*nr, 3*nr] = G[-1, -1] = 0
 	return G
 
-G = create_G(nr)
 
 def zero_out(M):
     M[0, :] = 0
     M[-1, :] = 0
     return M
 
-k = 10
-nz, z_max, dz, z, zz = grid(size=20, max=2*np.pi/k)
-z_osc = np.exp(1j * k * zz)
 
 # 0: f = 0. 1: f' = 0.
 def BC(m, nr, bc_begin, bc_end):
@@ -83,15 +72,16 @@ def BC(m, nr, bc_begin, bc_end):
 
     return m
 
+
 # Elements of the block matrix, of which 8 are zero.
-def create_M(rr, nr, rho_0, B_0, dv, k, zero_out, BC, DV_product):
+def create_M(rr, nr, dr, rho_0, B_0, dv, k, zero_out, BC, DV_product):
 	m0 = np.zeros((nr, nr))
-	m3 = zero_out(-1j/rr*DV_product(rr*rho_0))
+	m3 = zero_out(-1j/rr*DV_product(rr*rho_0, dr))
 	m4 = zero_out(np.diagflat(k*rho_0, 0))
-	m7 = zero_out(-1j*DV_product(B_0))
+	m7 = zero_out(-1j*DV_product(B_0, dr))
 	m8 = zero_out(np.diagflat(k*B_0, 0))
 	m9 = zero_out(-2j/(rho_0)*dv)
-	m10 = zero_out(-1j/(4*np.pi*rho_0*rr**2)*DV_product(rr**2*B_0))
+	m10 = zero_out(-1j/(4*np.pi*rho_0*rr**2)*DV_product(rr**2*B_0, dr))
 	m13 = zero_out(np.diagflat(2.0*k/rho_0, 0))
 	m14 = zero_out(np.diagflat(k*B_0/(4.0*np.pi*rho_0), 0))
 
@@ -112,16 +102,13 @@ def create_M(rr, nr, rho_0, B_0, dv, k, zero_out, BC, DV_product):
 				[m13, m14, m0, m16]])
 	return M
 
-k_min = 0
-k_max = 10
-dk = 0.5
-nk = 1 + (k_max - k_min)/dk
-kk = np.linspace(k_min, k_max, nk)
 
-def gamma_vs_k(G, rr, nr, rho_0, B_0, dv, kk, zero_out, BC, DV_product):
+
+
+def gamma_vs_k(G, rr, nr, dr, rho_0, B_0, dv, kk, zero_out, BC, DV_product):
 	gamma = []
 	for K in kk: 
-		M = create_M(rr, nr, rho_0, B_0, dv, K, zero_out, BC, DV_product)
+		M = create_M(rr, nr, dr, rho_0, B_0, dv, K, zero_out, BC, DV_product)
 		eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
 		gamma.append(eval.imag)
 
@@ -130,23 +117,16 @@ def gamma_vs_k(G, rr, nr, rho_0, B_0, dv, kk, zero_out, BC, DV_product):
 	plt.xlabel('k')
 	plt.ylabel('gamma')
 	plt.show()
-	
-gamma_vs_k(G, rr, nr, rho_0, B_0, dv, kk, zero_out, BC, DV_product)
 
-res_min = 50
-res_max = 100
-d_res = 25
-n_res = 1 + (res_max - res_min)/d_res
-res = np.linspace(res_min, res_max, n_res)
 
 def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G):
 	gamma = []
 	for i_res in res:
 		nr2, r_max2, dr2, r2, rr2 = grid(size=int(i_res), max=5.0)
-		P = np.exp(-rr2**4) + 0.05
+		P2 = np.exp(-rr2**4) + 0.05
 		dv = FD_matrix(nr2, dr2)
-		rho_0, B_0, J_0 = equilibrium(dv, r2, rr2, nr2, P)
-		M = create_M(rr2, nr2, rho_0, B_0, dv, 1, zero_out, BC, DV_product)
+		rho_0, B_0, J_0 = equilibrium(dv, r2, rr2, nr2)
+		M = create_M(rr2, nr2, dr2, rho_0, B_0, dv, 1, zero_out, BC, DV_product)
 		G = create_G(nr2)
 		eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
 		gamma.append(eval.imag)
@@ -156,10 +136,7 @@ def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, cre
 	plt.xlabel('Resolution')
 	plt.ylabel('gamma')
 	plt.show()
-	
-convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
-##
-M = create_M(rr, nr, rho_0, B_0, dv, k, zero_out, BC, DV_product)
+
 
 def plot_eigenvalues(M, G):
 	evals, evecs = eig(M, G)
@@ -168,14 +145,12 @@ def plot_eigenvalues(M, G):
 	plt.xlabel('Re')
 	plt.ylabel('Im')
 	plt.show()
-	
-#plot_eigenvalues(M, G)
-
 
 # def f1(x): return np.abs(x)
 # def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
 def f1(x): return np.real(x)
 def f2(x): return np.imag(x) 
+
 
 # ith mode by magnitude of imaginary part
 def plot_mode(i):
@@ -253,6 +228,36 @@ def plot_mode(i):
 	
 	plt.show()
 
-plot_mode(1)
+nr, r_max, dr, r, rr = grid(size=100, max=5.0)
+dv = FD_matrix(nr, dr)
+rho_0, B_0, J_0 = equilibrium(dv, r, rr, nr)
+
+'''plt.plot(r[1: -1], B_0[1: -1], r[1: -1], rho_0[1: -1], r[1: -1], J_0[1: -1])
+plt.show()'''
+
+G = create_G(nr)
+k = 1
+nz, z_max, dz, z, zz = grid(size=20, max=2*np.pi/k)
+z_osc = np.exp(1j * k * zz)
+
+res_min = 10
+res_max = 300
+d_res = 10
+n_res = 1 + (res_max - res_min)/d_res
+res = np.linspace(res_min, res_max, n_res)
+convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
+
+k_min = 0
+k_max = 10
+dk = 0.5
+nk = 1 + (k_max - k_min)/dk
+kk = np.linspace(k_min, k_max, nk)
+#gamma_vs_k(G, rr, nr, dr, rho_0, B_0, dv, kk, zero_out, BC, DV_product)
+
+M = create_M(rr, nr, dr, rho_0, B_0, dv, k, zero_out, BC, DV_product)
+#plot_eigenvalues(M, G)
+#plot_mode(1)
+
+
 
 
