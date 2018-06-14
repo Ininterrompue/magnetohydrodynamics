@@ -1,18 +1,21 @@
-import numpy
-from matplotlib import pyplot
+import numpy as np
+from matplotlib import pyplot as plt
 from scipy.sparse import dia_matrix
 from scipy.linalg import eig
+from scipy.sparse.linalg import eigs
 
-nr = 2 + 100
-r_max = 5.0
-dr = r_max/(nr - 2)
-r = numpy.linspace(-dr/2, r_max + dr/2, nr)
-rr = numpy.reshape(numpy.linspace(-dr/2, r_max + dr/2, nr), (nr, 1))
+def grid(size=10, max=1):
+	nx = 2 + size
+	dx = max/(nx - 2)
+	x = np.linspace(-dx/2, max + dx/2, nx)
+	xx = np.reshape(x, (nx, 1))
+	return nx, max, dx, x, xx
 
-P = numpy.exp(-rr**4) + 0.05
+nr, r_max, dr, r, rr = grid(size=100, max=3.0)
+P = np.exp(-rr**4) + 0.05
 
 def FD_matrix():
-    one = numpy.ones(nr)
+    one = np.ones(nr)
     dv = (dia_matrix((one, 1), shape=(nr, nr)) - dia_matrix((one, -1), shape=(nr, nr))).toarray()/(2*dr)
     return dv
 
@@ -27,132 +30,190 @@ rhs[0] = 0
 
 # Equilibrium rho and B. Mass of ion set to unity.
 rho_0 = P/2.0
-B2 = numpy.linalg.solve(op, rhs)
-B_0 = numpy.sign(B2)*numpy.sqrt(numpy.abs(B2))
+B2 = np.linalg.solve(op, rhs)
+B_0 = np.sign(B2)*np.sqrt(np.abs(B2))
 J_0 = (dv @ (rr*B_0))/rr
 
-'''pyplot.plot(r[1: -1], B_0[1: -1], 
+'''plt.plot(r[1: -1], B_0[1: -1], 
 			r[1: -1], rho_0[1: -1], 
 			r[1: -1], J_0[1: -1])
-pyplot.show()'''
-
-##
-m0 = numpy.zeros((nr, nr))
-k = 1
+plt.show()'''
 
 def DV_product(vec):
-    return (numpy.diagflat(vec[1:], 1) - numpy.diagflat(vec[:-1], -1))/(2*dr)
+    return (np.diagflat(vec[1:], 1) - np.diagflat(vec[:-1], -1))/(2*dr)
+
+# Generalized eigenvalue problem matrix
+G = np.identity(4*nr)
+G[0, 0] = G[nr - 1, nr - 1] = G[nr, nr] = G[2*nr - 1, 2*nr - 1] = 0
+G[2*nr, 2*nr] = G[3*nr - 1, 3*nr - 1] = G[3*nr, 3*nr] = G[-1, -1] = 0
 
 def zero_out(M):
     M[0, :] = 0
     M[-1, :] = 0
     return M
 
-# Generalized eigenvalue problem matrix
-G = numpy.identity(4*nr)
-G[0, 0] = G[nr - 1, nr - 1] = G[nr, nr] = G[2*nr - 1, 2*nr - 1] = 0
-G[2*nr, 2*nr] = G[3*nr - 1, 3*nr - 1] = G[3*nr, 3*nr] = G[-1, -1] = 0
-
-# Elements of the block matrix, of which 8 are zero.
-m3 = zero_out(1j/rr*DV_product(rr*rho_0))
-m4 = zero_out(numpy.diagflat(-k*rho_0, 0))
-m7 = zero_out(1j*DV_product(B_0))
-m8 = zero_out(numpy.diagflat(-k*B_0, 0))
-m9 = zero_out(2j/(rho_0)*dv)
-m10 = zero_out(1j/(4*numpy.pi*rho_0*rr**2)*DV_product(rr**2*B_0))
-m13 = zero_out(numpy.diagflat(-2.0*k/rho_0, 0))
-m14 = zero_out(numpy.diagflat(-k*B_0/(4.0*numpy.pi*rho_0), 0))
+k = 1
+nz, z_max, dz, z, zz = grid(size=20, max=2*np.pi/k)
+z_osc = np.exp(1j * k * zz)
 
 # 0: f = 0. 1: f' = 0.
-def BC(M, bc_begin, bc_end):
+def BC(m, bc_begin, bc_end):
     if bc_begin == 0:
-        M[0, 0] = 1
-        M[0, 1] = 1
+        m[0, 0] = 1
+        m[0, 1] = 1
     elif bc_begin == 1:
-        M[0, 0] = 1
-        M[0, 1] = -1
+        m[0, 0] = 1
+        m[0, 1] = -1
 
     if bc_end == 0:
-        M[nr - 1, nr - 1] = 1
-        M[nr - 1, nr - 2] = 1
+        m[nr - 1, nr - 1] = 1
+        m[nr - 1, nr - 2] = 1
     elif bc_end == 1:
-        M[nr - 1, nr - 1] = 1
-        M[nr - 1, nr - 2] = -1
+        m[nr - 1, nr - 1] = 1
+        m[nr - 1, nr - 2] = -1
 
-    return M
+    return m
 
-m1 = numpy.zeros((nr, nr))
-m6 = numpy.zeros((nr, nr))
-m11 = numpy.zeros((nr, nr))
-m16 = numpy.zeros((nr, nr))
-m1 = BC(m1, 1, 0)
-m6 = BC(m6, 0, 1)
-m11 = BC(m11, 0, 1)
-m16 = BC(m16, 1, 0)
+# Elements of the block matrix, of which 8 are zero.
+def create_M(rr, nr, rho_0, B_0, dv, k, zero_out, BC, DV_product):
+	m0 = np.zeros((nr, nr))
+	m3 = zero_out(-1j/rr*DV_product(rr*rho_0))
+	m4 = zero_out(np.diagflat(k*rho_0, 0))
+	m7 = zero_out(-1j*DV_product(B_0))
+	m8 = zero_out(np.diagflat(k*B_0, 0))
+	m9 = zero_out(-2j/(rho_0)*dv)
+	m10 = zero_out(-1j/(4*np.pi*rho_0*rr**2)*DV_product(rr**2*B_0))
+	m13 = zero_out(np.diagflat(2.0*k/rho_0, 0))
+	m14 = zero_out(np.diagflat(k*B_0/(4.0*np.pi*rho_0), 0))
 
-M = numpy.block([[m1, m0, m3, m4], 
+	m1 = np.zeros((nr, nr))
+	m6 = np.zeros((nr, nr))
+	m11 = np.zeros((nr, nr))
+	m16 = np.zeros((nr, nr))
+	m1 = BC(m1, 1, 0)
+	m6 = BC(m6, 0, 1)
+	m11 = BC(m11, 0, 1)
+	m16 = BC(m16, 1, 0)
+
+	M = np.block([[m1, m0, m3, m4], 
 				[m0, m6, m7, m8], 
 				[m9, m10, m11, m0], 
 				[m13, m14, m0, m16]])
+	return M
 
-evals, evects = eig(M, G)
+k_min = 0
+k_max = 10
+dk = 0.1
+nk = 1 + (k_max - k_min)/dk
+kk = np.linspace(k_min, k_max, nk)
 
-def plot_eigenvalues(evals, evects):
-    pyplot.scatter(evals.real, evals.imag, s=1)
-    pyplot.title('Omega')
-    pyplot.xlabel('Re')
-    pyplot.ylabel('Im')
-    pyplot.show()
+def gamma_vs_k(G, rr, nr, rho_0, B_0, dv, kk, zero_out, BC, DV_product):
+	gamma = []
+	for K in kk: 
+		M = create_M(rr, nr, rho_0, B_0, dv, K, zero_out, BC, DV_product)
+		evals = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
+		gamma.append(evals.imag)
 
-plot_eigenvalues(evals, evects)
-
-# ith mode by magnitude of imaginary part
-def plot_mode(i, evals, evects):
-	#evals = -1j*evals
-	index = numpy.argsort(evals.imag)
-	evals = evals[index]
-	print(evals)
-	i_0 = i
-#	i_0 = -8 - i
-	omega = evals[i_0]
-	v_omega = evects[:, i_0]
-	#print(numpy.angle(v_omega))
-	f = pyplot.figure()
-	f.suptitle(omega)
+	plt.plot(kk, gamma)
+	plt.title('Largest mode')
+	plt.xlabel('k')
+	plt.ylabel('gamma')
+	plt.show()
 	
-	ax = pyplot.subplot(2,2,1)
-	ax.set_title("rho")
-	rho = v_omega[0: nr]
-	phase = numpy.exp(-1j * numpy.angle(rho[0]))
-	ax.plot(r[1: -1], numpy.real(phase * rho[1: -1]),
-            r[1: -1], numpy.imag(phase * rho[1: -1]) ) 
-              
-	ax = pyplot.subplot(2,2,2)
-	ax.set_title("B_theta")
-	B = v_omega[nr: 2*nr]
-	ax.plot(r[1: -1], numpy.real(B[1: -1]),
-            r[1: -1], numpy.imag(B[1: -1]) )
-            
-	ax = pyplot.subplot(2,2,3)
-	ax.set_title("V_r")
-	V_r = v_omega[2*nr: 3*nr]
-	ax.plot(r[1: -1], numpy.real(V_r[1: -1]),
-            r[1: -1], numpy.imag(V_r[1: -1]) )
-            
-	ax = pyplot.subplot(2,2,4)
-	ax.set_title("V_z")	
-	V_z = v_omega[3*nr: 4*nr]
-	ax.plot(r[1: -1], numpy.real(V_z[1: -1]),
-            r[1: -1], numpy.imag(V_z[1: -1]) )
-
-	pyplot.show()
-
-# for jj in range(4*nr):
-#    plot_mode(jj, evals, evects)
-
-plot_mode(-1, evals, evects)
+#gamma_vs_k(G, rr, nr, rho_0, B_0, dv, kk, zero_out, BC, DV_product)
 
 ##
-'''pyplot.figure()
-pyplot.imshow(numpy.abs(evects.real)**.5)
-pyplot.show()'''
+M = create_M(rr, nr, rho_0, B_0, dv, k, zero_out, BC, DV_product)
+
+def plot_eigenvalues(M, G):
+	evals, evecs = eig(M, G)
+	plt.scatter(evals.real, evals.imag, s=1)
+	plt.title('Omega')
+	plt.xlabel('Re')
+	plt.ylabel('Im')
+	plt.show()
+	
+#plot_eigenvalues(M, G)
+
+
+# def f1(x): return np.abs(x)
+# def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
+def f1(x): return np.real(x)
+def f2(x): return np.imag(x) 
+
+# ith mode by magnitude of imaginary part
+def plot_mode(i):
+	evals, evecs = eig(M, G)
+
+	i_0 = -i
+	index = np.argsort(evals.imag)
+	omega = evals[index[i_0]]
+	v_omega = evecs[:, index[i_0]]
+	
+	rho = v_omega[0: nr]
+	B_theta = v_omega[nr: 2*nr]
+	V_r = v_omega[2*nr: 3*nr]
+	V_z = v_omega[3*nr: 4*nr]
+	phase = np.exp(-1j * np.angle(rho[0]))
+
+	# 1D plots of real and imaginary parts 
+	f = plt.figure()
+	f.suptitle(omega.imag)
+	
+	ax = plt.subplot(2,2,1)
+	ax.set_title('rho')
+	ax.plot(r[1: -1], f1(phase * rho[1: -1]),
+            r[1: -1], f2(phase * rho[1: -1])) 
+              
+	ax = plt.subplot(2,2,2)
+	ax.set_title('B_theta')
+	ax.plot(r[1: -1], f1(phase * B_theta[1: -1]),
+            r[1: -1], f2(phase * B_theta[1: -1]) )
+            
+	ax = plt.subplot(2,2,3)
+	ax.set_title('V_r')
+	ax.plot(r[1: -1], f1(phase * V_r[1: -1]),
+            r[1: -1], f2(phase * V_r[1: -1]) )
+            
+	ax = plt.subplot(2,2,4)
+	ax.set_title('V_z')	
+	ax.plot(r[1: -1], f1(phase * V_z[1: -1]),
+            r[1: -1], f2(phase * V_z[1: -1]) )
+
+	plt.show()
+	
+	rho_contour = rho_0[1: -1].T + f1(z_osc[1: -1] * phase * rho[1: -1])
+	B_theta_contour = B_0[1: -1].T + f1(z_osc[1: -1] * phase * B_theta[1: -1])
+	V_r_contour = f1(z_osc[1: -1] * phase * V_r[1: -1])
+	V_z_contour = f1(z_osc[1: -1] * phase * V_z[1: -1])
+	
+	# 2D contour plots
+	f = plt.figure()
+	f.suptitle(omega.imag)
+	R, Z = np.meshgrid(r[1: -1], z[1: -1])
+	
+	ax = plt.subplot(2,2,1)
+	ax.set_title('rho')
+	plot_1 = ax.contourf(R, Z, rho_contour, 100)
+	plt.colorbar(plot_1)
+	
+	ax = plt.subplot(2,2,2)
+	ax.set_title('B_theta')
+	plot_2 = ax.contourf(R, Z, B_theta_contour, 100)
+	plt.colorbar(plot_2)
+	
+	ax = plt.subplot(2,2,3)
+	ax.set_title('V_r')
+	plot_3 = ax.contourf(R, Z, V_r_contour, 100)
+	plt.colorbar(plot_3)
+	
+	ax = plt.subplot(2,2,4)
+	ax.set_title('V_z')
+	plot_4 = ax.contourf(R, Z, V_z_contour, 100)
+	plt.colorbar(plot_4)
+	
+	plt.show()
+
+plot_mode(1)
+
+
