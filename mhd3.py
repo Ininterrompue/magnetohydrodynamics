@@ -12,32 +12,38 @@ def grid(size=10, max=1):
 	return nx, max, dx, x, xx
 
 
-def FD_matrix(nr, dr):
+def FD_matrix(nr, dr, order):
     one = np.ones(nr)
-    dv = (dia_matrix((one, 1), shape=(nr, nr)) - dia_matrix((one, -1), shape=(nr, nr))).toarray()/(2*dr)
+
+    if order == 1:
+        dv = (dia_matrix((one, 1), shape=(nr, nr)) - dia_matrix((one, -1), shape=(nr, nr))).toarray() / (2 * dr)
+    elif order == 2:
+        dv = (dia_matrix((one, 1), shape=(nr, nr)) + dia_matrix((one, -1), shape=(nr, nr)) - 2 * dia_matrix((one, 0), shape=(nr, nr))).toarray() / dr**2
+    
     return dv
+    
 
 
-def equilibrium(dv, r, rr, nr):
+def equilibrium(FD_matrix, r, rr, nr, dr):
 	P = np.exp(-rr**4) + 0.05
-	op = dv/2 + dia_matrix((1.0/r, 0), shape=(nr, nr)).toarray()
+	op = FD_matrix(nr, dr, 1) / 2 + dia_matrix((1.0 / r, 0), shape=(nr, nr)).toarray()
 	op[0, 1] = -op[0, 0]
 	op[nr - 1, nr - 2] = -op[nr - 1, nr - 1]
 
-	rhs = -dv @ P
+	rhs = -FD_matrix(nr, dr, 1) @ P
 	rhs[-1] = 0
 	rhs[0] = 0
 
 	# Equilibrium rho and B. Mass of ion set to unity.
-	rho_0 = P/2.0
+	rho_0 = P / 2.0
 	B2 = np.linalg.solve(op, rhs)
-	B_0 = np.sign(B2)*np.sqrt(np.abs(B2))
-	J_0 = (dv @ (rr*B_0))/rr
+	B_0 = np.sign(B2) * np.sqrt(np.abs(B2))
+	J_0 = (FD_matrix(nr, dr, 1) @ (rr * B_0))/rr
 	return rho_0, B_0, J_0
 
 
 def DV_product(vec, dr):
-    return (np.diagflat(vec[1:], 1) - np.diagflat(vec[:-1], -1))/(2*dr)
+    return (np.diagflat(vec[1: ], 1) - np.diagflat(vec[: -1], -1)) / (2 * dr)
 
 
 # Generalized eigenvalue problem matrix
@@ -74,20 +80,19 @@ def BC(m, nr, bc_begin, bc_end):
 
 
 # Elements of the block matrix, of which 8 are zero.
-def create_M(rr, nr, dr, rho_0, B_0, dv, k, zero_out, BC, DV_product):
+def create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
 	m0 = np.zeros((nr, nr))
-	m3 = zero_out(-1j/rr*DV_product(rr*rho_0, dr))
-	m4 = zero_out(np.diagflat(k*rho_0, 0))	
-	m7 = zero_out(-1j*DV_product(B_0, dr))
-	m8 = zero_out(np.diagflat(k*B_0, 0))
-	m9 = zero_out(-2j/(rho_0)*dv)
-	m10 = zero_out(-1j/(4*np.pi*rho_0*rr**2)*DV_product(rr**2*B_0, dr))
-	# m10 = zero_out(-1j/(4*np.pi*rho_0*rr))*(B_0*DV_product(rr, dr) + dv @ (rr * B_0))
-	m13 = zero_out(np.diagflat(2.0*k/rho_0, 0))
-	m14 = zero_out(np.diagflat(k*B_0/(4.0*np.pi*rho_0), 0))
+	m3 = zero_out(-1j / rr * DV_product(rr * rho_0, dr))
+	m4 = zero_out(np.diagflat(k * rho_0, 0))	
+	m7 = zero_out(-1j * DV_product(B_0, dr))
+	m8 = zero_out(np.diagflat(k * B_0, 0))
+	m9 = zero_out(-2j / rho_0 * FD_matrix(nr, dr, 1))
+	m10 = zero_out(-1j / (4 * np.pi * rho_0 * rr**2) * DV_product(rr**2 * B_0, dr))
+	m13 = zero_out(np.diagflat(2.0 * k / rho_0, 0))
+	m14 = zero_out(np.diagflat(k * B_0 / (4.0 * np.pi * rho_0), 0))
 	
 	# Resistive MHD term
-	m6 = zero_out(-1j*k**2*D_eta * np.identity(nr))
+	m6 = zero_out(-1j * k**2 * D_eta * np.identity(nr) + 1j * D_eta * (1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)))
 	
 	m1 = np.zeros((nr, nr))
 	# m6 = np.zeros((nr, nr))
@@ -107,10 +112,10 @@ def create_M(rr, nr, dr, rho_0, B_0, dv, k, zero_out, BC, DV_product):
 	return M
 
 
-def gamma_vs_k(G, rr, nr, dr, rho_0, B_0, dv, kk, zero_out, BC, DV_product):
+def gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product):
 	gamma = []
 	for K in kk: 
-		M = create_M(rr, nr, dr, rho_0, B_0, dv, K, zero_out, BC, DV_product)
+		M = create_M(rr, nr, dr, rho_0, B_0, FD_matrix, K, zero_out, BC, DV_product)
 		eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
 		gamma.append(eval.imag)
 
@@ -126,9 +131,8 @@ def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, cre
 	for i_res in res:
 		nr2, r_max2, dr2, r2, rr2 = grid(size=int(i_res), max=5.0)
 		P2 = np.exp(-rr2**4) + 0.05
-		dv = FD_matrix(nr2, dr2)
-		rho_0, B_0, J_0 = equilibrium(dv, r2, rr2, nr2)
-		M = create_M(rr2, nr2, dr2, rho_0, B_0, dv, 3, zero_out, BC, DV_product)
+		rho_0, B_0, J_0 = equilibrium(FD_matrix, r2, rr2, nr2, dr2)
+		M = create_M(rr2, nr2, dr2, rho_0, B_0, FD_matrix, 3, zero_out, BC, DV_product)
 		G = create_G(nr2)
 # 		eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
 # 		gamma.append(eval.imag)
@@ -251,16 +255,15 @@ def plot_mode(i):
 	plt.ylabel('z')
 	plt.show()
 
-nr, r_max, dr, r, rr = grid(size=210, max=5.0)
-dv = FD_matrix(nr, dr)
-rho_0, B_0, J_0 = equilibrium(dv, r, rr, nr)
+nr, r_max, dr, r, rr = grid(size=200, max=5.0)
+rho_0, B_0, J_0 = equilibrium(FD_matrix, r, rr, nr, dr)
 
 # plt.plot(r[1: -1], B_0[1: -1], r[1: -1], rho_0[1: -1], r[1: -1], J_0[1: -1])
 # plt.show()
 
-k = 4
-D_eta = 0.2
-nz, z_max, dz, z, zz = grid(size=201, max=2*np.pi/k)
+k = 3
+D_eta = 0.1
+nz, z_max, dz, z, zz = grid(size=300, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G(nr)
 
@@ -275,15 +278,15 @@ res = np.linspace(res_min, res_max, n_res)
 
 k_min = 0
 k_max = 10
-dk = 0.5
+dk = 1
 nk = 1 + (k_max - k_min)/dk
 kk = np.linspace(k_min, k_max, nk)
 
-# gamma_vs_k(G, rr, nr, dr, rho_0, B_0, dv, kk, zero_out, BC, DV_product)
+# gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product)
 
-M = create_M(rr, nr, dr, rho_0, B_0, dv, k, zero_out, BC, DV_product)
+M = create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
 
-# plot_eigenvalues(M, G)
+plot_eigenvalues(M, G)
 plot_mode(1)
 
 
