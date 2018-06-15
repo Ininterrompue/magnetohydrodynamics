@@ -77,24 +77,28 @@ def BC(m, nr, bc_begin, bc_end):
 def create_M(rr, nr, dr, rho_0, B_0, dv, k, zero_out, BC, DV_product):
 	m0 = np.zeros((nr, nr))
 	m3 = zero_out(-1j/rr*DV_product(rr*rho_0, dr))
-	m4 = zero_out(np.diagflat(k*rho_0, 0))
+	m4 = zero_out(np.diagflat(k*rho_0, 0))	
 	m7 = zero_out(-1j*DV_product(B_0, dr))
 	m8 = zero_out(np.diagflat(k*B_0, 0))
 	m9 = zero_out(-2j/(rho_0)*dv)
 	m10 = zero_out(-1j/(4*np.pi*rho_0*rr**2)*DV_product(rr**2*B_0, dr))
+	# m10 = zero_out(-1j/(4*np.pi*rho_0*rr))*(B_0*DV_product(rr, dr) + dv @ (rr * B_0))
 	m13 = zero_out(np.diagflat(2.0*k/rho_0, 0))
 	m14 = zero_out(np.diagflat(k*B_0/(4.0*np.pi*rho_0), 0))
-
+	
+	# Resistive MHD term
+	m6 = zero_out(-1j*k**2*D_eta * np.identity(nr))
+	
 	m1 = np.zeros((nr, nr))
-	m6 = np.zeros((nr, nr))
+	# m6 = np.zeros((nr, nr))
 	m11 = np.zeros((nr, nr))
 	m16 = np.zeros((nr, nr))
 	
 	# BOUNDARY CONDITIONS 
 	m1 = BC(m1, nr, 1, 0)
-	m6 = BC(m6, nr, 0, 1)
+	m6 = BC(m6, nr, 0, 0)
 	m11 = BC(m11, nr, 0, 1)
-	m16 = BC(m16, nr, 1, 0)
+	m16 = BC(m16, nr, 1, 1)
 	
 	M = np.block([[m1, m0, m3, m4], 
 				[m0, m6, m7, m8], 
@@ -103,13 +107,11 @@ def create_M(rr, nr, dr, rho_0, B_0, dv, k, zero_out, BC, DV_product):
 	return M
 
 
-
-
 def gamma_vs_k(G, rr, nr, dr, rho_0, B_0, dv, kk, zero_out, BC, DV_product):
 	gamma = []
 	for K in kk: 
 		M = create_M(rr, nr, dr, rho_0, B_0, dv, K, zero_out, BC, DV_product)
-		eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
+		eval = eigs(M, k=1, M=G, sigma=10j, which='LI', return_eigenvectors=False)
 		gamma.append(eval.imag)
 
 	plt.plot(kk, gamma)
@@ -128,7 +130,7 @@ def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, cre
 		rho_0, B_0, J_0 = equilibrium(dv, r2, rr2, nr2)
 		M = create_M(rr2, nr2, dr2, rho_0, B_0, dv, 1, zero_out, BC, DV_product)
 		G = create_G(nr2)
-		eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
+		eval = eigs(M, k=1, M=G, sigma=10j, which='LI', return_eigenvectors=False)
 		gamma.append(eval.imag)
 	
 	plt.plot(res, gamma)
@@ -167,7 +169,12 @@ def plot_mode(i):
 	V_r = v_omega[2*nr: 3*nr]
 	V_z = v_omega[3*nr: 4*nr]
 	phase = np.exp(-1j * np.angle(rho[0]))
-
+# 	print(f1(phase * V_r)[0:10])
+# 	print(f1(phase * V_r)[-10:])
+# 	
+# 	print(f2(phase * V_z)[0:10])
+# 	print(f2(phase * V_z)[-10:])
+	
 	# 1D plots of real and imaginary parts 
 	f = plt.figure()
 	f.suptitle(omega.imag)
@@ -200,7 +207,7 @@ def plot_mode(i):
 	B_theta_contour = B_0[1: -1].T + epsilon * f1(z_osc[1: -1] * phase * B_theta[1: -1]) * np.exp(gamma * t)
 	V_r_contour = epsilon * f1(z_osc[1: -1] * phase * V_r[1: -1]) * np.exp(gamma * t)
 	V_z_contour = epsilon * f1(z_osc[1: -1] * phase * V_z[1: -1]) * np.exp(gamma * t)
-	
+
 	# 2D contour plots
 	f = plt.figure()
 	f.suptitle(omega.imag)
@@ -227,36 +234,45 @@ def plot_mode(i):
 	plt.colorbar(plot_4)
 	
 	plt.show()
+	
+	#2D quiver plot
+# 	R, Z = np.meshgrid(r[1: -1], z[1: -1])
+# 	d_vec = 10
+# 	plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], pivot='mid', width=0.004)
+# 	plt.show()
 
 nr, r_max, dr, r, rr = grid(size=100, max=5.0)
 dv = FD_matrix(nr, dr)
 rho_0, B_0, J_0 = equilibrium(dv, r, rr, nr)
 
-'''plt.plot(r[1: -1], B_0[1: -1], r[1: -1], rho_0[1: -1], r[1: -1], J_0[1: -1])
-plt.show()'''
+# plt.plot(r[1: -1], B_0[1: -1], r[1: -1], rho_0[1: -1], r[1: -1], J_0[1: -1])
+# plt.show()
 
-G = create_G(nr)
-k = 1
-nz, z_max, dz, z, zz = grid(size=20, max=2*np.pi/k)
+k = 4
+D_eta = 0.1
+nz, z_max, dz, z, zz = grid(size=200, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
+G = create_G(nr)
 
-res_min = 10
+res_min = 20
 res_max = 300
-d_res = 10
+d_res = 20
 n_res = 1 + (res_max - res_min)/d_res
 res = np.linspace(res_min, res_max, n_res)
-convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
+# k = 1 for convergence
+# convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
 
 k_min = 0
 k_max = 10
-dk = 0.5
+dk = 0.25
 nk = 1 + (k_max - k_min)/dk
 kk = np.linspace(k_min, k_max, nk)
-#gamma_vs_k(G, rr, nr, dr, rho_0, B_0, dv, kk, zero_out, BC, DV_product)
+# gamma_vs_k(G, rr, nr, dr, rho_0, B_0, dv, kk, zero_out, BC, DV_product)
 
 M = create_M(rr, nr, dr, rho_0, B_0, dv, k, zero_out, BC, DV_product)
-#plot_eigenvalues(M, G)
-#plot_mode(1)
+
+plot_eigenvalues(M, G)
+plot_mode(1)
 
 
 
