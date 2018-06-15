@@ -6,7 +6,7 @@ from scipy.sparse.linalg import eigs
 
 def grid(size=10, max=1):
 	nx = 2 + size
-	dx = max/(nx - 2)
+	dx = max/size
 	x = np.linspace(-dx/2, max + dx/2, nx)
 	xx = np.reshape(x, (nx, 1))
 	return nx, max, dx, x, xx
@@ -138,7 +138,6 @@ def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, cre
 		integral = dr2 * sum(np.abs(rho_test.imag))
 		gamma.append(integral)
 	
-	print(gamma)
 	plt.loglog(res, gamma, basex=2, basey=2)
 # 	plt.title('Resolution convergence of gamma')
 # 	plt.xlabel('Resolution')
@@ -252,16 +251,16 @@ def plot_mode(i):
 	plt.ylabel('z')
 	plt.show()
 
-nr, r_max, dr, r, rr = grid(size=301, max=5.0)
+nr, r_max, dr, r, rr = grid(size=210, max=5.0)
 dv = FD_matrix(nr, dr)
 rho_0, B_0, J_0 = equilibrium(dv, r, rr, nr)
 
 # plt.plot(r[1: -1], B_0[1: -1], r[1: -1], rho_0[1: -1], r[1: -1], J_0[1: -1])
 # plt.show()
 
-k = 3
+k = 4
 D_eta = 0.2
-nz, z_max, dz, z, zz = grid(size=200, max=2*np.pi/k)
+nz, z_max, dz, z, zz = grid(size=201, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G(nr)
 
@@ -272,7 +271,7 @@ n_res = 1 + (res_max - res_min)/d_res
 res = np.linspace(res_min, res_max, n_res)
 
 # k = 1 for convergence
-convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
+# convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
 
 k_min = 0
 k_max = 10
