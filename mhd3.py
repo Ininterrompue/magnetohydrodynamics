@@ -3,8 +3,8 @@ from matplotlib import pyplot
 from scipy.sparse import dia_matrix
 from scipy.linalg import eig
 
-nr = 2 + 200
-r_max = 10.0
+nr = 2 + 2
+r_max = 5.0
 dr = r_max/(nr - 2)
 r = numpy.linspace(-dr/2, r_max + dr/2, nr)
 rr = numpy.reshape(numpy.linspace(-dr/2, r_max + dr/2, nr), (nr, 1))
@@ -31,8 +31,8 @@ B2 = numpy.linalg.solve(op, rhs)
 B_0 = numpy.sign(B2)*numpy.sqrt(numpy.abs(B2))
 J_0 = (dv @ (rr*B_0))/rr
 
-pyplot.plot(r[1: -1], B_0[1: -1], 
-            r[1: -1], rho_0[1: -1],
+pyplot.plot(r[1: -1], P[1: -1],
+            r[1: -1], B_0[1: -1],
             r[1: -1], J_0[1: -1])
 pyplot.show()
 
@@ -97,6 +97,7 @@ m1 = BC(m1, 1, 0)
 m6 = BC(m6, 0, 1)
 m11 = BC(m11, 0, 1)
 m16 = BC(m16, 1, 0)
+
 
 M = numpy.block([[m1, m0, m3, m4], [m0, m6, m7, m8], [m9, m10, m11, m0], [m13, m14, m0, m16]])
 
