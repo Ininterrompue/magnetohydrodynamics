@@ -111,7 +111,7 @@ def gamma_vs_k(G, rr, nr, dr, rho_0, B_0, dv, kk, zero_out, BC, DV_product):
 	gamma = []
 	for K in kk: 
 		M = create_M(rr, nr, dr, rho_0, B_0, dv, K, zero_out, BC, DV_product)
-		eval = eigs(M, k=1, M=G, sigma=10j, which='LI', return_eigenvectors=False)
+		eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
 		gamma.append(eval.imag)
 
 	plt.plot(kk, gamma)
@@ -128,15 +128,23 @@ def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, cre
 		P2 = np.exp(-rr2**4) + 0.05
 		dv = FD_matrix(nr2, dr2)
 		rho_0, B_0, J_0 = equilibrium(dv, r2, rr2, nr2)
-		M = create_M(rr2, nr2, dr2, rho_0, B_0, dv, 1, zero_out, BC, DV_product)
+		M = create_M(rr2, nr2, dr2, rho_0, B_0, dv, 3, zero_out, BC, DV_product)
 		G = create_G(nr2)
-		eval = eigs(M, k=1, M=G, sigma=10j, which='LI', return_eigenvectors=False)
-		gamma.append(eval.imag)
+# 		eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
+# 		gamma.append(eval.imag)
+		eval, evec = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=True)
+		rho_test = evec[nr2: 2*nr2]
+		rho_test = rho_test * np.exp(-1j * np.angle(rho_test[0]))
+		integral = dr2 * sum(np.abs(rho_test.imag))
+		gamma.append(integral)
 	
-	plt.plot(res, gamma)
-	plt.title('Resolution convergence of gamma')
-	plt.xlabel('Resolution')
-	plt.ylabel('gamma')
+	print(gamma)
+	plt.loglog(res, gamma, basex=2, basey=2)
+# 	plt.title('Resolution convergence of gamma')
+# 	plt.xlabel('Resolution')
+# 	plt.ylabel('gamma')
+	plt.title('Integral of imaginary part of rho')
+	plt.xlabel('nr')
 	plt.show()
 
 
@@ -236,42 +244,47 @@ def plot_mode(i):
 	plt.show()
 	
 	#2D quiver plot
-# 	R, Z = np.meshgrid(r[1: -1], z[1: -1])
-# 	d_vec = 10
-# 	plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], pivot='mid', width=0.004)
-# 	plt.show()
+	R, Z = np.meshgrid(r[1: -1], z[1: -1])
+	d_vec = 10
+	plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], pivot='mid', width=0.004, scale=3.5)
+	plt.title('Flow velocity')
+	plt.xlabel('r')
+	plt.ylabel('z')
+	plt.show()
 
-nr, r_max, dr, r, rr = grid(size=100, max=5.0)
+nr, r_max, dr, r, rr = grid(size=301, max=5.0)
 dv = FD_matrix(nr, dr)
 rho_0, B_0, J_0 = equilibrium(dv, r, rr, nr)
 
 # plt.plot(r[1: -1], B_0[1: -1], r[1: -1], rho_0[1: -1], r[1: -1], J_0[1: -1])
 # plt.show()
 
-k = 4
-D_eta = 0.1
+k = 3
+D_eta = 0.2
 nz, z_max, dz, z, zz = grid(size=200, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G(nr)
 
 res_min = 20
-res_max = 300
-d_res = 20
+res_max = 200
+d_res = 5
 n_res = 1 + (res_max - res_min)/d_res
 res = np.linspace(res_min, res_max, n_res)
+
 # k = 1 for convergence
-# convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
+convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
 
 k_min = 0
 k_max = 10
-dk = 0.25
+dk = 0.5
 nk = 1 + (k_max - k_min)/dk
 kk = np.linspace(k_min, k_max, nk)
+
 # gamma_vs_k(G, rr, nr, dr, rho_0, B_0, dv, kk, zero_out, BC, DV_product)
 
 M = create_M(rr, nr, dr, rho_0, B_0, dv, k, zero_out, BC, DV_product)
 
-plot_eigenvalues(M, G)
+# plot_eigenvalues(M, G)
 plot_mode(1)
 
 
