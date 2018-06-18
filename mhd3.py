@@ -53,12 +53,9 @@ def DV_product(vec, dr):
 
 # Generalized eigenvalue problem matrix
 def create_G(nr):
-    G = np.identity(7*nr)
+    G = np.identity(4*nr)
     G[0, 0] = G[nr - 1, nr - 1] = G[nr, nr] = G[2*nr - 1, 2*nr - 1] = 0
-    G[2*nr, 2*nr] = G[3*nr - 1, 3*nr - 1] = G[3*nr, 3*nr] = 0
-    G[4*nr - 1, 4*nr - 1] = G[4*nr, 4*nr] = G[5*nr - 1, 5*nr - 1] = 0
-    G[5*nr, 5*nr] = G[6*nr - 1, 6*nr - 1] = G[6*nr - 6*nr] = 0
-    G[7*nr - 1, 7*nr - 1] = G[-1, -1] = 0
+    G[2*nr, 2*nr] = G[3*nr - 1, 3*nr - 1] = G[3*nr, 3*nr] = G[-1, -1] = 0
     return G
 
 
@@ -85,71 +82,36 @@ def BC(m, nr, bc_begin, bc_end):
         m[nr - 1, nr - 2] = -1
         
     return m
-    
 
-# Elements of the block matrix
+
+# Elements of the block matrix, of which 8 are zero.
 def create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     m0 = np.zeros((nr, nr))
+    m3 = zero_out(-1j / rr * DV_product(rr * rho_0, dr))
+    m4 = zero_out(np.diagflat(k * rho_0, 0))	
+    m7 = zero_out(-1j * DV_product(B_0, dr))
+    m8 = zero_out(np.diagflat(k * B_0, 0))
+    m9 = zero_out(-2j / rho_0 * FD_matrix(nr, dr, 1))
+    m10 = zero_out(-1j / (4 * np.pi * rho_0 * rr**2) * DV_product(rr**2 * B_0, dr))
+    m13 = zero_out(np.diagflat(2.0 * k / rho_0, 0))
+    m14 = zero_out(np.diagflat(k * B_0 / (4.0 * np.pi * rho_0), 0))
     
-    m_rho_Vr = zero_out(-1j / rr * DV_product(rr * rho_0, dr))
-    m_rho_Vtheta = zero_out(np.diagflat(2 * np.pi * m * rho_0 / rr, 0))
-    m_rho_Vz = zero_out(np.diagflat(k * rho_0, 0))
-    
-    m_Br_Vr = zero_out(np.diagflat(-2 * np.pi * m * B_0 / rr, 0))
-    
-    m_Btheta_Vr = zero_out(-1j * DV_product(B_0, dr))
-    m_Btheta_Vz = zero_out(np.diagflat(k * B_0, 0))
-    
-    m_Bz_Vz = zero_out(np.diagflat(-2 * np.pi * m * B_0 / rr, 0))
-    
-    m_Vr_rho = zero_out(-2j / rho_0 * FD_matrix(nr, dr, 1))
-    m_Vr_Br = zero_out(np.diagflat(-m * B_0 / (2 * rho_0 * rr), 0))
-    m_Vr_Btheta = zero_out(-1j / (4 * np.pi * rho_0 * rr**2) * DV_product(rr**2 * B_0, dr))
-    
-    m_Vtheta_rho = zero_out(np.diagflat(4 * np.pi * m / (rr * rho_0), 0)) 
-    
-    m_Vz_rho = zero_out(np.diagflat(2.0 * k / rho_0, 0))
-    m_Vz_Btheta = zero_out(np.diagflat(k * B_0 / (4.0 * np.pi * rho_0), 0))
-    m_Vz_Bz = zero_out(np.diagflat(-B_0 * m / (2 * rho_0 * rr), 0))
-    
-    m_Br_Br = np.zeros((nr, nr))
-    m_Btheta_Btheta = np.zeros((nr, nr))
-    m_Bz_Br = np.zeros((nr, nr))
-    m_Bz_Btheta = np.zeros((nr, nr))
-    m_Bz_Bz = np.zeros((nr, nr))
-    
-    m_rho_rho = np.zeros((nr, nr))
-    m_Vr_Vr = np.zeros((nr, nr))
-    m_Vtheta_Vtheta = np.zeros((nr, nr))
-    m_Vz_Vz = np.zeros((nr, nr))
-    
-    # Resistive term
-    m_Br_Br = m_Br_Br + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - 4 * np.pi**2 * m**2 / rr**2 - k**2 * np.identity(nr))
-    m_Btheta_Btheta = m_Btheta_Btheta + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - 4 * np.pi**2 * m**2 / rr**2 - k**2 * np.identity(nr))
-    m_Bz_Bz = m_Bz_Bz + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - 4 * np.pi**2 * m**2 / rr**2 - k**2 * np.identity(nr))
-    
-    # Hall term
-    m_Br_Br = m_Br_Br + D_H * zero_out(np.diagflat(-k / rr * (FD_matrix(nr, dr, 1) @ (rr * B_0)), 0))
-    m_Btheta_Btheta = m_Btheta_Btheta + D_H * zero_out(np.diagflat(-2 * k * B_0 / rr, 0))
-    m_Bz_Br = m_Bz_Br + D_H * zero_out(-1j / rr * (FD_matrix(nr, dr, 1) @ (rr * B_0)) * FD_matrix(nr, dr, 1))
-    m_Bz_Btheta = m_Bz_Btheta + D_H * zero_out(np.diagflat(-1j / rr * (FD_matrix(nr, dr, 2) @ (rr * B_0)), 0))
+    # Resistive MHD term
+    m6 = zero_out(-1j * k**2 * D_eta * np.identity(nr) + 1j * D_eta * (1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)))
+    m1 = np.zeros((nr, nr))
+    m11 = np.zeros((nr, nr))
+    m16 = np.zeros((nr, nr))
     
     # BOUNDARY CONDITIONS 
-    m_rho_rho = BC(m_rho_rho, nr, 1, 0)
-    m_Br_Br = BC(m_Br_Br, nr, 0, 0)
-    m_Btheta_Btheta = BC(m_Btheta_Btheta, nr, 0, 0)
-    m_Bz_Bz = BC(m_Bz_Bz, nr, 0, 0)
-    m_Vr_Vr = BC(m_Vr_Vr, nr, 0, 1)
-    m_Vtheta_Vtheta = BC(m_Vtheta_Vtheta, nr, 0, 1)
-    m_Vz_Vz = BC(m_Vz_Vz, nr, 1, 1)
+    m1 = BC(m1, nr, 1, 0)
+    m6 = BC(m6, nr, 0, 0)
+    m11 = BC(m11, nr, 0, 1)
+    m16 = BC(m16, nr, 1, 1)
     
-    M = np.block([[m_rho_rho, m0, m0, m0, m_rho_Vr, m_rho_Vtheta, m_rho_Vz], 
-				[m0, m_Br_Br, m0, m0, m_Br_Vr, m0, m0], 
-				[m0, m0, m_Btheta_Btheta, m0, m_Btheta_Vr, m0, m_Btheta_Vz], 
-				[m0, m_Bz_Br, m_Bz_Btheta, m_Bz_Bz, m0, m0, m_Bz_Vz],
-				[m_Vr_rho, m_Vr_Br, m_Vr_Btheta, m0, m_Vr_Vr, m0, m0],
-				[m_Vtheta_rho, m0, m0, m0, m0, m_Vtheta_Vtheta, m0],
-				[m_Vz_rho, m0, m_Vz_Btheta, m_Vz_Bz, m0, m0, m_Vz_Vz]])
+    M = np.block([[m1, m0, m3, m4], 
+				[m0, m6, m7, m8], 
+				[m9, m10, m11, m0], 
+				[m13, m14, m0, m16]])
     return M
 
 
@@ -217,13 +179,10 @@ def plot_mode(i):
     gamma = omega.imag
     
     rho = v_omega[0: nr]
-    B_r = v_omega[nr: 2*nr]
-    B_theta = v_omega[2*nr: 3*nr]
-    B_z = v_omega[3*nr: 4*nr]
-    V_r = v_omega[4*nr: 5*nr]
-    V_theta = v_omega[5*nr: 6*nr]
-    V_z = v_omega[6*nr: 7*nr]
-    phase = np.exp(-1j * np.angle(rho[2]))
+    B_theta = v_omega[nr: 2*nr]
+    V_r = v_omega[2*nr: 3*nr]
+    V_z = v_omega[3*nr: 4*nr]
+    phase = np.exp(-1j * np.angle(rho[0]))
 #     print(f1(phase * B_theta)[0:10])
 #     print(f1(phase * B_theta)[-10:])
 #   
@@ -233,52 +192,34 @@ def plot_mode(i):
 	# 1D plots of real and imaginary parts 
     f = plt.figure()
     f.suptitle(omega.imag)
-            
-    ax = plt.subplot(3,3,1)
-    ax.set_title('B_r')
-    ax.plot(r[1: -1], f1(phase * B_r[1: -1]),
-            r[1: -1], f2(phase * B_r[1: -1]))  
+    
+    ax = plt.subplot(2,2,1)
+    ax.set_title('rho')
+    ax.plot(r[1: -1], f1(phase * rho[1: -1]),
+            r[1: -1], f2(phase * rho[1: -1])) 
               
-    ax = plt.subplot(3,3,2)
+    ax = plt.subplot(2,2,2)
     ax.set_title('B_theta')
     ax.plot(r[1: -1], f1(phase * B_theta[1: -1]),
             r[1: -1], f2(phase * B_theta[1: -1]) )
             
-    ax = plt.subplot(3,3,3)
-    ax.set_title('B_z')
-    ax.plot(r[1: -1], f1(phase * B_z[1: -1]),
-            r[1: -1], f2(phase * B_z[1: -1]))    
-                    
-    ax = plt.subplot(3,3,4)
+    ax = plt.subplot(2,2,3)
     ax.set_title('V_r')
     ax.plot(r[1: -1], f1(phase * V_r[1: -1]),
             r[1: -1], f2(phase * V_r[1: -1]) )
-            
-    ax = plt.subplot(3,3,5)
-    ax.set_title('V_theta')
-    ax.plot(r[1: -1], f1(phase * V_theta[1: -1]),
-            r[1: -1], f2(phase * V_theta[1: -1]) )
            
-    ax = plt.subplot(3,3,6)
+    ax = plt.subplot(2,2,4)
     ax.set_title('V_z')	
     ax.plot(r[1: -1], f1(phase * V_z[1: -1]),
             r[1: -1], f2(phase * V_z[1: -1]) )
-            
-    ax = plt.subplot(3,3,7)
-    ax.set_title('rho')
-    ax.plot(r[1: -1], f1(phase * rho[1: -1]),
-            r[1: -1], f2(phase * rho[1: -1]))
     
     plt.show()
     
     epsilon = 1
     t = 0
     rho_contour = rho_0[1: -1].T + epsilon * f1(z_osc[1: -1] * phase * rho[1: -1]) * np.exp(gamma * t)
-    B_r_contour = epsilon * f1(z_osc[1: -1] * phase * B_r[1: -1]) * np.exp(gamma * t)
     B_theta_contour = B_0[1: -1].T + epsilon * f1(z_osc[1: -1] * phase * B_theta[1: -1]) * np.exp(gamma * t)
-    B_z_contour = epsilon * f1(z_osc[1: -1] * phase * B_z[1: -1]) * np.exp(gamma * t)
     V_r_contour = epsilon * f1(z_osc[1: -1] * phase * V_r[1: -1]) * np.exp(gamma * t)
-    V_theta_contour = epsilon * f1(z_osc[1: -1] * phase * V_theta[1: -1]) * np.exp(gamma * t)
     V_z_contour = epsilon * f1(z_osc[1: -1] * phase * V_z[1: -1]) * np.exp(gamma * t)
     
     # 2D contour plots
@@ -286,42 +227,25 @@ def plot_mode(i):
     f.suptitle(omega.imag)
     R, Z = np.meshgrid(r[1: -1], z[1: -1])
     
-
-    
-    ax = plt.subplot(3,3,1)
-    ax.set_title('B_r')
-    plot_1 = ax.contourf(R, Z, B_r_contour, 100)
+    ax = plt.subplot(2,2,1)
+    ax.set_title('rho')
+    plot_1 = ax.contourf(R, Z, rho_contour, 100)
     plt.colorbar(plot_1)
     
-    ax = plt.subplot(3,3,2)
+    ax = plt.subplot(2,2,2)
     ax.set_title('B_theta')
     plot_2 = ax.contourf(R, Z, B_theta_contour, 100)
     plt.colorbar(plot_2)
     
-    ax = plt.subplot(3,3,3)
-    ax.set_title('B_z')
-    plot_3 = ax.contourf(R, Z, B_z_contour, 100)
+    ax = plt.subplot(2,2,3)
+    ax.set_title('V_r')
+    plot_3 = ax.contourf(R, Z, V_r_contour, 100)
     plt.colorbar(plot_3)
     
-    ax = plt.subplot(3,3,4)
-    ax.set_title('V_r')
-    plot_4 = ax.contourf(R, Z, V_r_contour, 100)
-    plt.colorbar(plot_4)
-    
-    ax = plt.subplot(3,3,5)
-    ax.set_title('V_theta')
-    plot_5 = ax.contourf(R, Z, V_theta_contour, 100)
-    plt.colorbar(plot_5)
-    
-    ax = plt.subplot(3,3,6)
+    ax = plt.subplot(2,2,4)
     ax.set_title('V_z')
-    plot_6 = ax.contourf(R, Z, V_z_contour, 100)
-    plt.colorbar(plot_6)
-    
-    ax = plt.subplot(3,3,7)
-    ax.set_title('rho')
-    plot_7 = ax.contourf(R, Z, rho_contour, 100)
-    plt.colorbar(plot_7)
+    plot_4 = ax.contourf(R, Z, V_z_contour, 100)
+    plt.colorbar(plot_4)
     
     plt.show()
     
@@ -338,16 +262,14 @@ def plot_mode(i):
 
 
 ##
-nr, r_max, dr, r, rr = grid(size=100, max=5.0)
+nr, r_max, dr, r, rr = grid(size=200, max=5.0)
 rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out, r, rr, nr, dr)
 
 # plt.plot(r[1: -1], B_0[1: -1], r[1: -1], rho_0[1: -1], r[1: -1], J_0[1: -1])
 # plt.show()
 
-k = 4
-m = 0
-D_eta = 1e-10
-D_H = 0
+k = 1
+D_eta = 0.2
 nz, z_max, dz, z, zz = grid(size=300, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G(nr)
@@ -363,16 +285,16 @@ res = np.linspace(res_min, res_max, n_res)
 
 k_min = 0
 k_max = 10
-dk = 0.5
+dk = 0.25
 nk = 1 + (k_max - k_min)/dk
 kk = np.linspace(k_min, k_max, nk)
 
-# gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product)
+gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product)
 
 M = create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
 
 # plot_eigenvalues(M, G)
-plot_mode(1)
+# plot_mode(1)
 
 
 
