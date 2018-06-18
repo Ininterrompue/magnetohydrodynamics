@@ -104,7 +104,7 @@ class FDSystem:
         M[-1, :] = 0
         return M
 
-    def lhs_bc(self, bc_type='value'):
+    def lhs_bc(self, bc_type):
         entries = self.bc_rows[bc_type]
         row = np.zeros(self.grid.N)
         row[0] = entries[0]
@@ -113,7 +113,7 @@ class FDSystem:
         M[0] = row
         return M
 
-    def rhs_bc(self, bc_type='value'):
+    def rhs_bc(self, bc_type):
         entries = self.bc_rows[bc_type]
         row = np.zeros(self.grid.N)
         row[-2] = entries[0]
