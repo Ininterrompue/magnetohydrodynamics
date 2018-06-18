@@ -26,12 +26,14 @@ def FD_matrix(nr, dr, order):
     return dv
     
 
-
-def equilibrium(FD_matrix, r, rr, nr, dr):
+def equilibrium(FD_matrix, zero_out, r, rr, nr, dr):
     P = np.exp(-rr**4) + 0.05
-    op = FD_matrix(nr, dr, 1) / 2 + dia_matrix((1.0 / r, 0), shape=(nr, nr)).toarray()
-    op[0, 1] = -op[0, 0]
-    op[nr - 1, nr - 2] = -op[nr - 1, nr - 1]
+    op = zero_out(FD_matrix(nr, dr, 1) / 2 + dia_matrix((1.0 / r, 0), shape=(nr, nr)).toarray())
+    
+    op[0, 0] = 1
+    op[0, 1] = 1
+    op[nr - 1, nr - 1] = -r[-1] / r[-2]
+    op[nr - 1, nr - 2] = 1
 
     rhs = -FD_matrix(nr, dr, 1) @ P
     rhs[-1] = 0
@@ -132,7 +134,7 @@ def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, cre
     for i_res in res:
         nr2, r_max2, dr2, r2, rr2 = grid(size=int(i_res), max=5.0)
         P2 = np.exp(-rr2**4) + 0.05
-        rho_0, B_0, J_0 = equilibrium(FD_matrix, r2, rr2, nr2, dr2)
+        rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out, r2, rr2, nr2, dr2)
         M = create_M(rr2, nr2, dr2, rho_0, B_0, FD_matrix, 3, zero_out, BC, DV_product)
         G = create_G(nr2)
 #       eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
@@ -181,8 +183,8 @@ def plot_mode(i):
     V_r = v_omega[2*nr: 3*nr]
     V_z = v_omega[3*nr: 4*nr]
     phase = np.exp(-1j * np.angle(rho[0]))
-    print(f1(phase * B_theta)[0:10])
-    print(f1(phase * B_theta)[-10:])
+#     print(f1(phase * B_theta)[0:10])
+#     print(f1(phase * B_theta)[-10:])
 #   
 #   print(f2(phase * V_z)[0:10])
 #   print(f2(phase * V_z)[-10:])
@@ -258,14 +260,16 @@ def plot_mode(i):
     plt.ylabel('z')
     plt.show()
 
+
+##
 nr, r_max, dr, r, rr = grid(size=200, max=5.0)
-rho_0, B_0, J_0 = equilibrium(FD_matrix, r, rr, nr, dr)
+rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out, r, rr, nr, dr)
 
 # plt.plot(r[1: -1], B_0[1: -1], r[1: -1], rho_0[1: -1], r[1: -1], J_0[1: -1])
 # plt.show()
 
-k = 3
-D_eta = 0.1
+k = 1
+D_eta = 0.2
 nz, z_max, dz, z, zz = grid(size=300, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G(nr)
@@ -281,16 +285,16 @@ res = np.linspace(res_min, res_max, n_res)
 
 k_min = 0
 k_max = 10
-dk = 1
+dk = 0.25
 nk = 1 + (k_max - k_min)/dk
 kk = np.linspace(k_min, k_max, nk)
 
-# gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product)
+gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product)
 
 M = create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
 
 # plot_eigenvalues(M, G)
-plot_mode(1)
+# plot_mode(1)
 
 
 
