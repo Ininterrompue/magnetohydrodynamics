@@ -43,7 +43,7 @@ def equilibrium(FD_matrix, zero_out, r, rr, nr, dr):
     rho_0 = P / 2.0
     B2 = np.linalg.solve(op, rhs)
     B_0 = np.sign(B2) * np.sqrt(np.abs(B2))
-    J_0 = (FD_matrix(nr, dr, 1) @ (rr * B_0))/rr
+    J_0 = (FD_matrix(nr, dr, 1) @ (rr * B_0)) / rr
     return rho_0, B_0, J_0
 
 
@@ -192,6 +192,32 @@ def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, cre
     plt.xlabel('nr')
     plt.show()
 
+
+def pinch(rho, B, rr, nr, dr, t_max, dt):
+    nt = int(t_max / dt)    
+    Vr = np.reshape(np.zeros(nr), (nr, 1))
+  
+    for n in range(nt):
+        rho_temp = rho.copy()
+        B_temp = B.copy()
+        Vr_temp = Vr.copy()
+        
+        rho[1: -1] = rho_temp[1: -1] - dt * (rr[2: ] * rho_temp[2: ] * Vr_temp[2: ] - rr[: -2] * rho_temp[: -2] * Vr_temp[: -2]) / (rr[1: -1] * 2 * dr)
+        B[1: -1] = B_temp[1: -1] - dt * (Vr_temp[2: ] * B_temp[2: ] - Vr_temp[: -2] * B_temp[: -2]) / (2 * dr)
+        Vr[1: -1] = (Vr_temp[1: -1] - 2 * dt * (rho_temp[2: ] - rho_temp[: -2]) / (rho_temp[1: -1] * 2 * dr)
+                     - B_temp[1: -1] * dt * (rr[2: ] * B_temp[2: ] - rr[: -2] * B_temp[: -2]) / (4 * np.pi * rho_temp[1: -1] * rr[1: -1] * 2 * dr))
+        
+        rho[0] = rho[1]
+        rho[-1] = rho[-2]
+        B[0] = -B[1]
+        B[-1] = rr[-2] * B[-2] / rr[-1]
+        Vr[0] = Vr[1]
+        Vr[-1] = -Vr[-2]
+
+    plt.plot(r[1: -1], B[1: -1], r[1: -1], rho[1: -1], r[1: -1], Vr[1: -1])
+    plt.legend(['B', 'rho', 'V_r'])
+    plt.show()        
+        
 
 def plot_eigenvalues(M, G):
     evals, evecs = eig(M, G)
@@ -342,14 +368,15 @@ rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out, r, rr, nr, dr)
 # plt.plot(r[1: -1], B_0[1: -1], r[1: -1], rho_0[1: -1], r[1: -1], J_0[1: -1])
 # plt.show()
 
-# B_1 = 2 * B_0
+# B_1 = 1 * B_0.copy()
+# pinch(rho_0, B_1, rr, nr, dr, 0.1, 0.001)
 
 ##
 k = 1
 m = 0
 D_eta = 1
 D_H = 0
-nz, z_max, dz, z, zz = grid(size=300, max=2*np.pi/k)
+nz, z_max, dz, z, zz = grid(size=200, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G(nr)
 
@@ -370,8 +397,9 @@ kk = np.linspace(k_min, k_max, nk)
 
 # gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product)
 
-M = create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
 
+
+M = create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
 # plot_eigenvalues(M, G)
 plot_mode(1)
 
