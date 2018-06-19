@@ -87,7 +87,7 @@ def BC(m, nr, bc_begin, bc_end):
     return m
     
 
-# Elements of the block matrix
+# State vector X = (rho, B, V)
 def create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     m0 = np.zeros((nr, nr))
     
@@ -125,7 +125,8 @@ def create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     
     # Resistive term
     m_Br_Br = m_Br_Br + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - 4 * np.pi**2 * m**2 / rr**2 - k**2 * np.identity(nr))
-    m_Btheta_Btheta = m_Btheta_Btheta + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - 4 * np.pi**2 * m**2 / rr**2 - k**2 * np.identity(nr))
+    m_Btheta_Btheta = m_Btheta_Btheta + 1j * D_eta * (zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - 4 * np.pi**2 * m**2 / rr**2 
+                                                      - k**2 * np.identity(nr) - 1 / rr**2 * np.identity(nr)))
     m_Bz_Bz = m_Bz_Bz + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - 4 * np.pi**2 * m**2 / rr**2 - k**2 * np.identity(nr))
     
     # Hall term
@@ -140,7 +141,7 @@ def create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     m_Btheta_Btheta = BC(m_Btheta_Btheta, nr, 0, 0)
     m_Bz_Bz = BC(m_Bz_Bz, nr, 0, 0)
     m_Vr_Vr = BC(m_Vr_Vr, nr, 0, 1)
-    m_Vtheta_Vtheta = BC(m_Vtheta_Vtheta, nr, 0, 1)
+    m_Vtheta_Vtheta = BC(m_Vtheta_Vtheta, nr, 0, 0)
     m_Vz_Vz = BC(m_Vz_Vz, nr, 1, 1)
     
     M = np.block([[m_rho_rho, m0, m0, m0, m_rho_Vr, m_rho_Vtheta, m_rho_Vz], 
@@ -227,44 +228,43 @@ def plot_mode(i):
 #     print(f1(phase * B_theta)[0:10])
 #     print(f1(phase * B_theta)[-10:])
 #   
-#   print(f2(phase * V_z)[0:10])
-#   print(f2(phase * V_z)[-10:])
+#     print(np.angle(rho))
 	
 	# 1D plots of real and imaginary parts 
     f = plt.figure()
     f.suptitle(omega.imag)
             
-    ax = plt.subplot(3,3,1)
-    ax.set_title('B_r')
-    ax.plot(r[1: -1], f1(phase * B_r[1: -1]),
-            r[1: -1], f2(phase * B_r[1: -1]))  
+#     ax = plt.subplot(3,3,1)
+#     ax.set_title('B_r')
+#     ax.plot(r[1: -1], f1(phase * B_r[1: -1]),
+#             r[1: -1], f2(phase * B_r[1: -1]))  
               
-    ax = plt.subplot(3,3,2)
+    ax = plt.subplot(2,2,2)
     ax.set_title('B_theta')
     ax.plot(r[1: -1], f1(phase * B_theta[1: -1]),
             r[1: -1], f2(phase * B_theta[1: -1]) )
             
-    ax = plt.subplot(3,3,3)
-    ax.set_title('B_z')
-    ax.plot(r[1: -1], f1(phase * B_z[1: -1]),
-            r[1: -1], f2(phase * B_z[1: -1]))    
+#     ax = plt.subplot(3,3,3)
+#     ax.set_title('B_z')
+#     ax.plot(r[1: -1], f1(phase * B_z[1: -1]),
+#             r[1: -1], f2(phase * B_z[1: -1]))    
                     
-    ax = plt.subplot(3,3,4)
+    ax = plt.subplot(2,2,3)
     ax.set_title('V_r')
     ax.plot(r[1: -1], f1(phase * V_r[1: -1]),
             r[1: -1], f2(phase * V_r[1: -1]) )
             
-    ax = plt.subplot(3,3,5)
-    ax.set_title('V_theta')
-    ax.plot(r[1: -1], f1(phase * V_theta[1: -1]),
-            r[1: -1], f2(phase * V_theta[1: -1]) )
+#     ax = plt.subplot(3,3,5)
+#     ax.set_title('V_theta')
+#     ax.plot(r[1: -1], f1(phase * V_theta[1: -1]),
+#             r[1: -1], f2(phase * V_theta[1: -1]) )
            
-    ax = plt.subplot(3,3,6)
+    ax = plt.subplot(2,2,4)
     ax.set_title('V_z')	
     ax.plot(r[1: -1], f1(phase * V_z[1: -1]),
             r[1: -1], f2(phase * V_z[1: -1]) )
             
-    ax = plt.subplot(3,3,7)
+    ax = plt.subplot(2,2,1)
     ax.set_title('rho')
     ax.plot(r[1: -1], f1(phase * rho[1: -1]),
             r[1: -1], f2(phase * rho[1: -1]))
@@ -286,39 +286,37 @@ def plot_mode(i):
     f.suptitle(omega.imag)
     R, Z = np.meshgrid(r[1: -1], z[1: -1])
     
-
+#     ax = plt.subplot(3,3,1)
+#     ax.set_title('B_r')
+#     plot_1 = ax.contourf(R, Z, B_r_contour, 100)
+#     plt.colorbar(plot_1)
     
-    ax = plt.subplot(3,3,1)
-    ax.set_title('B_r')
-    plot_1 = ax.contourf(R, Z, B_r_contour, 100)
-    plt.colorbar(plot_1)
-    
-    ax = plt.subplot(3,3,2)
+    ax = plt.subplot(2,2,2)
     ax.set_title('B_theta')
     plot_2 = ax.contourf(R, Z, B_theta_contour, 100)
     plt.colorbar(plot_2)
     
-    ax = plt.subplot(3,3,3)
-    ax.set_title('B_z')
-    plot_3 = ax.contourf(R, Z, B_z_contour, 100)
-    plt.colorbar(plot_3)
+#     ax = plt.subplot(3,3,3)
+#     ax.set_title('B_z')
+#     plot_3 = ax.contourf(R, Z, B_z_contour, 100)
+#     plt.colorbar(plot_3)
     
-    ax = plt.subplot(3,3,4)
+    ax = plt.subplot(2,2,3)
     ax.set_title('V_r')
     plot_4 = ax.contourf(R, Z, V_r_contour, 100)
     plt.colorbar(plot_4)
     
-    ax = plt.subplot(3,3,5)
-    ax.set_title('V_theta')
-    plot_5 = ax.contourf(R, Z, V_theta_contour, 100)
-    plt.colorbar(plot_5)
+#     ax = plt.subplot(3,3,5)
+#     ax.set_title('V_theta')
+#     plot_5 = ax.contourf(R, Z, V_theta_contour, 100)
+#     plt.colorbar(plot_5)
     
-    ax = plt.subplot(3,3,6)
+    ax = plt.subplot(2,2,4)
     ax.set_title('V_z')
     plot_6 = ax.contourf(R, Z, V_z_contour, 100)
     plt.colorbar(plot_6)
     
-    ax = plt.subplot(3,3,7)
+    ax = plt.subplot(2,2,1)
     ax.set_title('rho')
     plot_7 = ax.contourf(R, Z, rho_contour, 100)
     plt.colorbar(plot_7)
@@ -338,15 +336,18 @@ def plot_mode(i):
 
 
 ##
-nr, r_max, dr, r, rr = grid(size=100, max=5.0)
+nr, r_max, dr, r, rr = grid(size=200, max=5.0)
 rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out, r, rr, nr, dr)
 
 # plt.plot(r[1: -1], B_0[1: -1], r[1: -1], rho_0[1: -1], r[1: -1], J_0[1: -1])
 # plt.show()
 
-k = 4
+# B_1 = 2 * B_0
+
+##
+k = 1
 m = 0
-D_eta = 1e-10
+D_eta = 1
 D_H = 0
 nz, z_max, dz, z, zz = grid(size=300, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
@@ -363,7 +364,7 @@ res = np.linspace(res_min, res_max, n_res)
 
 k_min = 0
 k_max = 10
-dk = 0.5
+dk = 0.25
 nk = 1 + (k_max - k_min)/dk
 kk = np.linspace(k_min, k_max, nk)
 
