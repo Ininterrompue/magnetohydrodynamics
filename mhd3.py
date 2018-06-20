@@ -42,7 +42,7 @@ def equilibrium(FD_matrix, zero_out, r, rr, nr, dr):
     # Equilibrium rho and B. Mass of ion set to unity.
     rho_0 = P / 2.0
     B2 = np.linalg.solve(op, rhs)
-    B_0 = np.sign(B2) * np.sqrt(np.abs(B2))
+    B_0 = np.sqrt(4 * np.pi) * np.sign(B2) * np.sqrt(np.abs(B2))
     J_0 = (FD_matrix(nr, dr, 1) @ (rr * B_0)) / rr
     return rho_0, B_0, J_0
 
@@ -113,9 +113,9 @@ def create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     m_Vz_Bz = zero_out(np.diagflat(-B_0 * m / (2 * rho_0 * rr), 0))
     
     m_Br_Br = np.zeros((nr, nr))
+    m_Btheta_rho = np.zeros((nr, nr))
     m_Btheta_Btheta = np.zeros((nr, nr))
     m_Bz_Br = np.zeros((nr, nr))
-    m_Bz_Btheta = np.zeros((nr, nr))
     m_Bz_Bz = np.zeros((nr, nr))
     
     m_rho_rho = np.zeros((nr, nr))
@@ -124,16 +124,16 @@ def create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     m_Vz_Vz = np.zeros((nr, nr))
     
     # Resistive term
-    m_Br_Br = m_Br_Br + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - 4 * np.pi**2 * m**2 / rr**2 - k**2 * np.identity(nr))
-    m_Btheta_Btheta = m_Btheta_Btheta + 1j * D_eta * (zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - 4 * np.pi**2 * m**2 / rr**2 
-                                                      - k**2 * np.identity(nr) - 1 / rr**2 * np.identity(nr)))
-    m_Bz_Bz = m_Bz_Bz + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - 4 * np.pi**2 * m**2 / rr**2 - k**2 * np.identity(nr))
+    m_Br_Br = m_Br_Br + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - np.diagflat(4 * np.pi**2 * m**2 / rr**2 + k**2 + 1 / rr**2, 0))
+    m_Btheta_Btheta = m_Btheta_Btheta + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - np.diagflat(4 * np.pi**2 * m**2 / rr**2 + k**2 + 1 / rr**2, 0))
+    m_Bz_Bz = m_Bz_Bz + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - np.diagflat(4 * np.pi**2 * m**2 / rr**2 + k**2, 0))
     
     # Hall term
-    m_Br_Br = m_Br_Br + D_H * zero_out(np.diagflat(-k / rr * (FD_matrix(nr, dr, 1) @ (rr * B_0)), 0))
-    m_Btheta_Btheta = m_Btheta_Btheta + D_H * zero_out(np.diagflat(-2 * k * B_0 / rr, 0))
-    m_Bz_Br = m_Bz_Br + D_H * zero_out(-1j / rr * (FD_matrix(nr, dr, 1) @ (rr * B_0)) * FD_matrix(nr, dr, 1))
-    m_Bz_Btheta = m_Bz_Btheta + D_H * zero_out(np.diagflat(-1j / rr * (FD_matrix(nr, dr, 2) @ (rr * B_0)), 0))
+    m_Br_Br = m_Br_Br + D_H * zero_out(np.diagflat(-k / (rr * rho_0) * (FD_matrix(nr, dr, 1) @ (rr * B_0)), 0))
+    m_Btheta_rho = m_Btheta_rho + D_H * zero_out(np.diagflat(k * B_0 / (rr * rho_0**2) * FD_matrix(nr, dr, 1) @ (rr * B_0), 0))
+    m_Btheta_Btheta = m_Btheta_Btheta + D_H * zero_out(np.diagflat(-2 * k * B_0 / (rr * rho_0) + (FD_matrix(nr, dr, 1) @ (1 / rho_0)) * B_0 * k, 0))
+    m_Bz_Br = m_Bz_Br + D_H * zero_out(-1j / (rr * rho_0) * ((FD_matrix(nr, dr, 1) @ (rr * B_0)) * FD_matrix(nr, dr, 1) + np.diagflat(FD_matrix(nr, dr, 2) @ (rr * B_0), 0))
+                                       - np.diagflat(1j * FD_matrix(nr, dr, 1) @ (1 / rho_0) * 1 / rr * FD_matrix(nr, dr, 1) @ (rr * B_0), 0))
     
     # BOUNDARY CONDITIONS 
     m_rho_rho = BC(m_rho_rho, nr, 1, 0)
@@ -146,8 +146,8 @@ def create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     
     M = np.block([[m_rho_rho, m0, m0, m0, m_rho_Vr, m_rho_Vtheta, m_rho_Vz], 
 				[m0, m_Br_Br, m0, m0, m_Br_Vr, m0, m0], 
-				[m0, m0, m_Btheta_Btheta, m0, m_Btheta_Vr, m0, m_Btheta_Vz], 
-				[m0, m_Bz_Br, m_Bz_Btheta, m_Bz_Bz, m0, m0, m_Bz_Vz],
+				[m_Btheta_rho, m0, m_Btheta_Btheta, m0, m_Btheta_Vr, m0, m_Btheta_Vz], 
+				[m0, m_Bz_Br, m0, m_Bz_Bz, m0, m0, m_Bz_Vz],
 				[m_Vr_rho, m_Vr_Br, m_Vr_Btheta, m0, m_Vr_Vr, m0, m0],
 				[m_Vtheta_rho, m0, m0, m0, m0, m_Vtheta_Vtheta, m0],
 				[m_Vz_rho, m0, m_Vz_Btheta, m_Vz_Bz, m0, m0, m_Vz_Vz]])
@@ -158,7 +158,7 @@ def gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_produc
     gamma = []
     for K in kk: 
 	    M = create_M(rr, nr, dr, rho_0, B_0, FD_matrix, K, zero_out, BC, DV_product)
-	    eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
+	    eval = eigs(M, k=1, M=G, sigma=3j, which='LI', return_eigenvectors=False)
 	    gamma.append(eval.imag)
 
     plt.plot(kk, gamma)
@@ -174,22 +174,23 @@ def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, cre
         nr2, r_max2, dr2, r2, rr2 = grid(size=int(i_res), max=5.0)
         P2 = np.exp(-rr2**4) + 0.05
         rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out, r2, rr2, nr2, dr2)
-        M = create_M(rr2, nr2, dr2, rho_0, B_0, FD_matrix, 3, zero_out, BC, DV_product)
+        M = create_M(rr2, nr2, dr2, rho_0, B_0, FD_matrix, 1, zero_out, BC, DV_product)
         G = create_G(nr2)
-#       eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
-#       gamma.append(eval.imag)
-        eval, evec = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=True)
-        rho_test = evec[nr2: 2*nr2]
-        rho_test = rho_test * np.exp(-1j * np.angle(rho_test[0]))
-        integral = dr2 * sum(np.abs(rho_test.imag))
-        gamma.append(integral)
+        eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
+        gamma.append(eval.imag)
+#         eval, evec = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=True)
+#         rho_test = evec[nr2: 2*nr2]
+#         rho_test = rho_test * np.exp(-1j * np.angle(rho_test[0]))
+#         integral = dr2 * sum(np.abs(rho_test.imag))
+#         gamma.append(integral)
 	
-    plt.loglog(res, gamma, basex=2, basey=2)
-#   plt.title('Resolution convergence of gamma')
-#   plt.xlabel('Resolution')
-#   plt.ylabel('gamma')
-    plt.title('Integral of imaginary part of rho')
-    plt.xlabel('nr')
+#     plt.loglog(res, gamma, basex=2, basey=2)
+    plt.plot(res, gamma)
+    plt.title('Resolution convergence of gamma')
+    plt.xlabel('Resolution')
+    plt.ylabel('gamma')
+#     plt.title('Integral of imaginary part of rho')
+#     plt.xlabel('nr')
     plt.show()
 
 
@@ -202,16 +203,16 @@ def pinch(rho, B, rr, nr, dr, t_max, dt):
         B_temp = B.copy()
         Vr_temp = Vr.copy()
         
-        rho[1: -1] = rho_temp[1: -1] - dt * (rr[2: ] * rho_temp[2: ] * Vr_temp[2: ] - rr[: -2] * rho_temp[: -2] * Vr_temp[: -2]) / (rr[1: -1] * 2 * dr)
-        B[1: -1] = B_temp[1: -1] - dt * (Vr_temp[2: ] * B_temp[2: ] - Vr_temp[: -2] * B_temp[: -2]) / (2 * dr)
-        Vr[1: -1] = (Vr_temp[1: -1] - 2 * dt * (rho_temp[2: ] - rho_temp[: -2]) / (rho_temp[1: -1] * 2 * dr)
-                     - B_temp[1: -1] * dt * (rr[2: ] * B_temp[2: ] - rr[: -2] * B_temp[: -2]) / (4 * np.pi * rho_temp[1: -1] * rr[1: -1] * 2 * dr))
+        rho[1: -1] = rho_temp[1: -1] - dt / (rr[1: -1] * 2 * dr) * (rr[2: ] * rho_temp[2: ] * Vr_temp[2: ] - rr[: -2] * rho_temp[: -2] * Vr_temp[: -2])
+        B[1: -1] = B_temp[1: -1] - dt / (2 * dr) * (Vr_temp[2: ] * B_temp[2: ] - Vr_temp[: -2] * B_temp[: -2])
+        Vr[1: -1] = (Vr_temp[1: -1] - 2 * dt / (rho_temp[1: -1] * 2 * dr) * (rho_temp[2: ] - rho_temp[: -2]) 
+                     - B_temp[1: -1] * dt / (4 * np.pi * rho_temp[1: -1] * rr[1: -1] * 2 * dr) * (rr[2: ] * B_temp[2: ] - rr[: -2] * B_temp[: -2]))
         
         rho[0] = rho[1]
         rho[-1] = rho[-2]
         B[0] = -B[1]
         B[-1] = rr[-2] * B[-2] / rr[-1]
-        Vr[0] = Vr[1]
+        Vr[0] = -Vr[1]
         Vr[-1] = -Vr[-2]
 
     plt.plot(r[1: -1], B[1: -1], r[1: -1], rho[1: -1], r[1: -1], Vr[1: -1])
@@ -233,10 +234,8 @@ def f1(x): return np.real(x)
 def f2(x): return np.imag(x) 
 
 
-# ith mode by magnitude of imaginary part
 def plot_mode(i):
     evals, evecs = eig(M, G)
-    
     i_0 = -i
     index = np.argsort(evals.imag)
     omega = evals[index[i_0]]
@@ -260,37 +259,37 @@ def plot_mode(i):
     f = plt.figure()
     f.suptitle(omega.imag)
             
-#     ax = plt.subplot(3,3,1)
-#     ax.set_title('B_r')
-#     ax.plot(r[1: -1], f1(phase * B_r[1: -1]),
-#             r[1: -1], f2(phase * B_r[1: -1]))  
+    ax = plt.subplot(3,3,1)
+    ax.set_title('B_r')
+    ax.plot(r[1: -1], f1(phase * B_r[1: -1]),
+            r[1: -1], f2(phase * B_r[1: -1]))  
               
-    ax = plt.subplot(2,2,2)
+    ax = plt.subplot(3,3,2)
     ax.set_title('B_theta')
     ax.plot(r[1: -1], f1(phase * B_theta[1: -1]),
             r[1: -1], f2(phase * B_theta[1: -1]) )
             
-#     ax = plt.subplot(3,3,3)
-#     ax.set_title('B_z')
-#     ax.plot(r[1: -1], f1(phase * B_z[1: -1]),
-#             r[1: -1], f2(phase * B_z[1: -1]))    
+    ax = plt.subplot(3,3,3)
+    ax.set_title('B_z')
+    ax.plot(r[1: -1], f1(phase * B_z[1: -1]),
+            r[1: -1], f2(phase * B_z[1: -1]))    
                     
-    ax = plt.subplot(2,2,3)
+    ax = plt.subplot(3,3,4)
     ax.set_title('V_r')
     ax.plot(r[1: -1], f1(phase * V_r[1: -1]),
             r[1: -1], f2(phase * V_r[1: -1]) )
             
-#     ax = plt.subplot(3,3,5)
-#     ax.set_title('V_theta')
-#     ax.plot(r[1: -1], f1(phase * V_theta[1: -1]),
-#             r[1: -1], f2(phase * V_theta[1: -1]) )
+    ax = plt.subplot(3,3,5)
+    ax.set_title('V_theta')
+    ax.plot(r[1: -1], f1(phase * V_theta[1: -1]),
+            r[1: -1], f2(phase * V_theta[1: -1]) )
            
-    ax = plt.subplot(2,2,4)
+    ax = plt.subplot(3,3,6)
     ax.set_title('V_z')	
     ax.plot(r[1: -1], f1(phase * V_z[1: -1]),
             r[1: -1], f2(phase * V_z[1: -1]) )
             
-    ax = plt.subplot(2,2,1)
+    ax = plt.subplot(3,3,7)
     ax.set_title('rho')
     ax.plot(r[1: -1], f1(phase * rho[1: -1]),
             r[1: -1], f2(phase * rho[1: -1]))
@@ -312,37 +311,37 @@ def plot_mode(i):
     f.suptitle(omega.imag)
     R, Z = np.meshgrid(r[1: -1], z[1: -1])
     
-#     ax = plt.subplot(3,3,1)
-#     ax.set_title('B_r')
-#     plot_1 = ax.contourf(R, Z, B_r_contour, 100)
-#     plt.colorbar(plot_1)
+    ax = plt.subplot(3,3,1)
+    ax.set_title('B_r')
+    plot_1 = ax.contourf(R, Z, B_r_contour, 100)
+    plt.colorbar(plot_1)
     
-    ax = plt.subplot(2,2,2)
+    ax = plt.subplot(3,3,2)
     ax.set_title('B_theta')
     plot_2 = ax.contourf(R, Z, B_theta_contour, 100)
     plt.colorbar(plot_2)
     
-#     ax = plt.subplot(3,3,3)
-#     ax.set_title('B_z')
-#     plot_3 = ax.contourf(R, Z, B_z_contour, 100)
-#     plt.colorbar(plot_3)
+    ax = plt.subplot(3,3,3)
+    ax.set_title('B_z')
+    plot_3 = ax.contourf(R, Z, B_z_contour, 100)
+    plt.colorbar(plot_3)
     
-    ax = plt.subplot(2,2,3)
+    ax = plt.subplot(3,3,4)
     ax.set_title('V_r')
     plot_4 = ax.contourf(R, Z, V_r_contour, 100)
     plt.colorbar(plot_4)
     
-#     ax = plt.subplot(3,3,5)
-#     ax.set_title('V_theta')
-#     plot_5 = ax.contourf(R, Z, V_theta_contour, 100)
-#     plt.colorbar(plot_5)
+    ax = plt.subplot(3,3,5)
+    ax.set_title('V_theta')
+    plot_5 = ax.contourf(R, Z, V_theta_contour, 100)
+    plt.colorbar(plot_5)
     
-    ax = plt.subplot(2,2,4)
+    ax = plt.subplot(3,3,6)
     ax.set_title('V_z')
     plot_6 = ax.contourf(R, Z, V_z_contour, 100)
     plt.colorbar(plot_6)
     
-    ax = plt.subplot(2,2,1)
+    ax = plt.subplot(3,3,7)
     ax.set_title('rho')
     plot_7 = ax.contourf(R, Z, rho_contour, 100)
     plt.colorbar(plot_7)
@@ -362,42 +361,40 @@ def plot_mode(i):
 
 
 ##
-nr, r_max, dr, r, rr = grid(size=200, max=5.0)
+nr, r_max, dr, r, rr = grid(size=400, max=5.0)
 rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out, r, rr, nr, dr)
 
 # plt.plot(r[1: -1], B_0[1: -1], r[1: -1], rho_0[1: -1], r[1: -1], J_0[1: -1])
 # plt.show()
 
-# B_1 = 1 * B_0.copy()
-# pinch(rho_0, B_1, rr, nr, dr, 0.1, 0.001)
+# B_1 = 2 * B_0.copy()
+# pinch(rho_0, B_1, rr, nr, dr, 0.1, 0.00001)
 
 ##
 k = 1
 m = 0
-D_eta = 1
-D_H = 0
+D_eta = 0.5
+D_H = 0.5
 nz, z_max, dz, z, zz = grid(size=200, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G(nr)
 
 res_min = 20
 res_max = 200
-d_res = 5
+d_res = 10
 n_res = 1 + (res_max - res_min)/d_res
 res = np.linspace(res_min, res_max, n_res)
 
 # k = 1 for convergence
 # convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
 
-k_min = 0
-k_max = 10
+k_min = 1
+k_max = 4
 dk = 0.25
 nk = 1 + (k_max - k_min)/dk
 kk = np.linspace(k_min, k_max, nk)
 
 # gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product)
-
-
 
 M = create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
 # plot_eigenvalues(M, G)
