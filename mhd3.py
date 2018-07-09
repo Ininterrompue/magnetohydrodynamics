@@ -6,56 +6,75 @@ from scipy.sparse.linalg import eigs
 
 def grid(size=10, max=1, ghost=1):
     global nx, dx, x, xx, gh
+    gh = ghost
     nx = 2 * gh + size
     dx = max/size
     x = np.linspace(-(2*gh - 1)/2 * dx, max + (2*gh - 1)/2 * dx, nx)
     xx = np.reshape(x, (nx, 1))
-    gh = ghost
     
     return nx, dx, x, xx
 
 
-def FD_matrix(nr, dr, order):
+def FD_matrix(order):
     one = np.ones(nr)
-
-    if order == 1:
-        dv = (dia_matrix((one, 1), shape=(nr, nr)) 
-        - dia_matrix((one, -1), shape=(nr, nr))).toarray() / (2 * dr)
-    elif order == 2:
-        dv = (dia_matrix((one, 1), shape=(nr, nr)) 
-        + dia_matrix((one, -1), shape=(nr, nr)) 
-        - 2 * dia_matrix((one, 0), shape=(nr, nr))).toarray() / dr**2
     
+    if order == 1:
+        if gh == 1:
+            dv = (dia_matrix((one, 1), shape=(nr, nr)) - dia_matrix((one, -1), shape=(nr, nr))).toarray() / (2 * dr)
+            
+        # This should only be used in preparation for WENO
+        elif gh == 3:
+            dv = 1 / dr * (1/60 * dia_matrix((one, 3), shape=(nr, nr)) - 3/20 * dia_matrix((one, 2), shape=(nr, nr)) + 3/4 * dia_matrix((one, 1), shape=(nr, nr))
+                - 3/4 * dia_matrix((one, -1), shape=(nr, nr)) + 3/20 * dia_matrix((one, -2), shape=(nr, nr)) - 1/60 * dia_matrix((one, -3), shape=(nr, nr)))
+    if order == 2:
+        if gh == 1:
+            dv = 1 / dr**2 * (dia_matrix((one, 1), shape=(nr, nr)) - 2 * dia_matrix((one, 0), shape=(nr, nr)) + dia_matrix((one, -1), shape=(nr, nr)))
+            
     return dv
     
 
 def equilibrium(FD_matrix, zero_out):
     P = np.exp(-rr**4) + 0.05
-    op = zero_out(FD_matrix(nr, dr, 1) / 2 + dia_matrix((1.0 / r, 0), shape=(nr, nr)).toarray())
+    lhs = zero_out(FD_matrix(1) / 2 + dia_matrix((1.0 / r, 0), shape=(nr, nr)).toarray())
+    rhs = -FD_matrix(1) @ P
     
-    op[0, 0] = 1
-    op[0, 1] = 1
-    op[nr - 1, nr - 1] = -r[-1] / r[-2]
-    op[nr - 1, nr - 2] = 1
-
-    rhs = -FD_matrix(nr, dr, 1) @ P
-    rhs[-1] = 0
-    rhs[0] = 0
+    if gh == 1:
+        rhs[-1] = 0
+        rhs[0] = 0
+        
+        lhs[0, 0] = 1
+        lhs[0, 1] = 1
+        lhs[nr - 1, nr - 1] = -r[-1] / r[-2]
+        lhs[nr - 1, nr - 2] = 1
     
+    elif gh == 3:
+        rhs[0] = 0
+        rhs[1] = 0
+        rhs[2] = 0
+        rhs[-1] = 0
+        rhs[-2] = 0
+        rhs[-3] = 0
+        lhs[1, :] = 0
+        lhs[2, :] = 0
+        lhs[-2, :] = 0
+        lhs[-3, :] = 0
+        
+        
+        
     # Equilibrium rho and B. Mass of ion set to unity.
     rho_0 = P / 2.0
-    B2 = np.linalg.solve(op, rhs)
+    B2 = np.linalg.solve(lhs, rhs)
     B_0 = np.sqrt(4 * np.pi) * np.sign(B2) * np.sqrt(np.abs(B2))
-    J_0 = (FD_matrix(nr, dr, 1) @ (rr * B_0)) / rr
+    J_0 = (FD_matrix(1) @ (rr * B_0)) / rr
     return rho_0, B_0, J_0
 
 
-def DV_product(vec, dr):
+def DV_product(vec):
     return (np.diagflat(vec[1: ], 1) - np.diagflat(vec[: -1], -1)) / (2 * dr)
 
 
 # Generalized eigenvalue problem matrix
-def create_G(nr):
+def create_G():
     G = np.identity(7*nr)
     G[0, 0] = G[nr - 1, nr - 1] = G[nr, nr] = G[2*nr - 1, 2*nr - 1] = 0
     G[2*nr, 2*nr] = G[3*nr - 1, 3*nr - 1] = G[3*nr, 3*nr] = 0
@@ -78,7 +97,7 @@ def zero_out(M):
 
 
 # 0: f = 0. 1: f' = 0.
-def BC(m, nr, bc_begin, bc_end):
+def BC(m, bc_begin, bc_end):
     if bc_begin == 0:
         m[0, 0] = 1
         m[0, 1] = 1
@@ -97,23 +116,23 @@ def BC(m, nr, bc_begin, bc_end):
     
 
 # State vector X = (rho, B, V)
-def create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
+def create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     m0 = np.zeros((nr, nr))
     
-    m_rho_Vr = zero_out(-1j / rr * DV_product(rr * rho_0, dr))
+    m_rho_Vr = zero_out(-1j / rr * DV_product(rr * rho_0))
     m_rho_Vtheta = zero_out(np.diagflat(2 * np.pi * m * rho_0 / rr, 0))
     m_rho_Vz = zero_out(np.diagflat(k * rho_0, 0))
     
     m_Br_Vr = zero_out(np.diagflat(-2 * np.pi * m * B_0 / rr, 0))
     
-    m_Btheta_Vr = zero_out(-1j * DV_product(B_0, dr))
+    m_Btheta_Vr = zero_out(-1j * DV_product(B_0))
     m_Btheta_Vz = zero_out(np.diagflat(k * B_0, 0))
     
     m_Bz_Vz = zero_out(np.diagflat(-2 * np.pi * m * B_0 / rr, 0))
     
-    m_Vr_rho = zero_out(-2j / rho_0 * FD_matrix(nr, dr, 1))
+    m_Vr_rho = zero_out(-2j / rho_0 * FD_matrix(1))
     m_Vr_Br = zero_out(np.diagflat(-m * B_0 / (2 * rho_0 * rr), 0))
-    m_Vr_Btheta = zero_out(-1j / (4 * np.pi * rho_0 * rr**2) * DV_product(rr**2 * B_0, dr))
+    m_Vr_Btheta = zero_out(-1j / (4 * np.pi * rho_0 * rr**2) * DV_product(rr**2 * B_0))
     
     m_Vtheta_rho = zero_out(np.diagflat(4 * np.pi * m / (rr * rho_0), 0)) 
     
@@ -133,28 +152,28 @@ def create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     m_Vz_Vz = np.zeros((nr, nr))
     
     # Resistive term
-    m_Br_Br = m_Br_Br + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - np.diagflat(4 * np.pi**2 * m**2 / rr**2 + k**2 + 1 / rr**2, 0))
-    m_Btheta_Btheta = m_Btheta_Btheta + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - np.diagflat(4 * np.pi**2 * m**2 / rr**2 + k**2 + 1 / rr**2, 0))
-    m_Bz_Bz = m_Bz_Bz + 1j * D_eta * zero_out((1 / rr * FD_matrix(nr, dr, 1) + FD_matrix(nr, dr, 2)) - np.diagflat(4 * np.pi**2 * m**2 / rr**2 + k**2, 0))
+    m_Br_Br = m_Br_Br + 1j * D_eta * zero_out((1 / rr * FD_matrix(1) + FD_matrix(2)) - np.diagflat(4 * np.pi**2 * m**2 / rr**2 + k**2 + 1 / rr**2, 0))
+    m_Btheta_Btheta = m_Btheta_Btheta + 1j * D_eta * zero_out((1 / rr * FD_matrix(1) + FD_matrix(2)) - np.diagflat(4 * np.pi**2 * m**2 / rr**2 + k**2 + 1 / rr**2, 0))
+    m_Bz_Bz = m_Bz_Bz + 1j * D_eta * zero_out((1 / rr * FD_matrix(1) + FD_matrix(2)) - np.diagflat(4 * np.pi**2 * m**2 / rr**2 + k**2, 0))
     
     # Hall term
-    m_Br_Br = m_Br_Br + D_H * zero_out(np.diagflat(-k / (rr * rho_0) * (FD_matrix(nr, dr, 1) @ (rr * B_0)), 0))
-    m_Btheta_rho = m_Btheta_rho + D_H * zero_out(np.diagflat(k * B_0 / (rr * rho_0**2) * FD_matrix(nr, dr, 1) @ (rr * B_0), 0))
-    m_Btheta_Btheta = m_Btheta_Btheta + D_H * zero_out(np.diagflat(-2 * k * B_0 / (rr * rho_0) + (FD_matrix(nr, dr, 1) @ (1 / rho_0)) * B_0 * k, 0))
-    m_Bz_Br = m_Bz_Br + D_H * zero_out(-1j / (rr * rho_0) * ((FD_matrix(nr, dr, 1) @ (rr * B_0)) * FD_matrix(nr, dr, 1) + np.diagflat(FD_matrix(nr, dr, 2) @ (rr * B_0), 0))
-                                       - np.diagflat(1j * FD_matrix(nr, dr, 1) @ (1 / rho_0) * 1 / rr * FD_matrix(nr, dr, 1) @ (rr * B_0), 0))
+    m_Br_Br = m_Br_Br + D_H * zero_out(np.diagflat(-k / (rr * rho_0) * (FD_matrix(1) @ (rr * B_0)), 0))
+    m_Btheta_rho = m_Btheta_rho + D_H * zero_out(np.diagflat(k * B_0 / (rr * rho_0**2) * FD_matrix(1) @ (rr * B_0), 0))
+    m_Btheta_Btheta = m_Btheta_Btheta + D_H * zero_out(np.diagflat(-2 * k * B_0 / (rr * rho_0) + (FD_matrix(1) @ (1 / rho_0)) * B_0 * k, 0))
+    m_Bz_Br = m_Bz_Br + D_H * zero_out(-1j / (rr * rho_0) * ((FD_matrix(1) @ (rr * B_0)) * FD_matrix(1) + np.diagflat(FD_matrix(2) @ (rr * B_0), 0))
+                                       - np.diagflat(1j * FD_matrix(1) @ (1 / rho_0) * 1 / rr * FD_matrix(1) @ (rr * B_0), 0))
     
     # Electron pressure term
-    m_Btheta_rho = m_Btheta_rho + D_P * zero_out(np.diagflat(k * (1 / rho_0**2 * (FD_matrix(nr, dr, 1) @ rho_0) + FD_matrix(nr, dr, 1) @ (1 / rho_0)), 0))
+    m_Btheta_rho = m_Btheta_rho + D_P * zero_out(np.diagflat(k * (1 / rho_0**2 * (FD_matrix(1) @ rho_0) + FD_matrix(1) @ (1 / rho_0)), 0))
     
     # Boundary conditions
-    m_rho_rho = BC(m_rho_rho, nr, 1, 0)
-    m_Br_Br = BC(m_Br_Br, nr, 0, 0)
-    m_Btheta_Btheta = BC(m_Btheta_Btheta, nr, 0, 0)
-    m_Bz_Bz = BC(m_Bz_Bz, nr, 0, 0)
-    m_Vr_Vr = BC(m_Vr_Vr, nr, 0, 1)
-    m_Vtheta_Vtheta = BC(m_Vtheta_Vtheta, nr, 0, 1)
-    m_Vz_Vz = BC(m_Vz_Vz, nr, 1, 1)
+    m_rho_rho = BC(m_rho_rho, 1, 0)
+    m_Br_Br = BC(m_Br_Br, 0, 0)
+    m_Btheta_Btheta = BC(m_Btheta_Btheta, 0, 0)
+    m_Bz_Bz = BC(m_Bz_Bz, 0, 0)
+    m_Vr_Vr = BC(m_Vr_Vr, 0, 1)
+    m_Vtheta_Vtheta = BC(m_Vtheta_Vtheta, 0, 1)
+    m_Vz_Vz = BC(m_Vz_Vz, 1, 1)
     
     M = np.block([[m_rho_rho, m0, m0, m0, m_rho_Vr, m_rho_Vtheta, m_rho_Vz], 
 				[m0, m_Br_Br, m0, m0, m_Br_Vr, m0, m0], 
@@ -167,10 +186,10 @@ def create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     return M
 
 
-def gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M):
+def gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M):
     gamma = []
     for K in kk: 
-	    M = create_M(rr, nr, dr, rho_0, B_0, FD_matrix, K, zero_out, BC, DV_product)
+	    M = create_M(rho_0, B_0, FD_matrix, K, zero_out, BC, DV_product)
 	    eval = eigs(M, k=1, M=G, sigma=20j, which='LI', return_eigenvectors=False)
 	    gamma.append(eval.imag)
 
@@ -184,19 +203,19 @@ def gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_produc
 def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G):
     gamma = []
     for i_res in res:
-        nr2, r_max2, dr2, r2, rr2 = grid(size=int(i_res), max=5.0)
-        P2 = np.exp(-rr2**4) + 0.05
-        rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out, r2, rr2, nr2, dr2)
-        M = create_M(rr2, nr2, dr2, rho_0, B_0, FD_matrix, 1, zero_out, BC, DV_product)
-        G = create_G(nr2)
-        eval = eigs(M, k=1, M=G, sigma=10j, which='LI', return_eigenvectors=False)
+        global nr, dr, r, rr
+        nr, dr, r, rr = grid(size=int(i_res), max=5.0, ghost=1)
+        P2 = np.exp(-rr**4) + 0.05
+        rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
+        M = create_M(rho_0, B_0, FD_matrix, 1, zero_out, BC, DV_product)
+        G = create_G()
+        eval = eigs(M, k=1, M=G, sigma=3j, which='LI', return_eigenvectors=False)
         gamma.append(eval.imag)
 #         eval, evec = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=True)
 #         rho_test = evec[nr2: 2*nr2]
 #         rho_test = rho_test * np.exp(-1j * np.angle(rho_test[0]))
 #         integral = dr2 * sum(np.abs(rho_test.imag))
 #         gamma.append(integral)
-	
 #     plt.loglog(res, gamma, basex=2, basey=2)
     plt.plot(res, gamma)
     plt.title('Resolution convergence of gamma')
@@ -280,12 +299,12 @@ def WENO(f, fp, fm, phi_N, u):
     fhat_right = np.reshape(np.zeros(nr), (nr, 1))
     fhat_right[3: -3] = (1/12 * (-f(u[2: -4]) + 7 * f(u[3: -3]) + 7 * f(u[4: -2]) - f(u[5: -1]))
                   - phi_N(fp(u[2: -4]) - fp(u[1: -5]), fp(u[3: -3]) - fp(u[2: -4]), fp(u[4: -2]) - fp(u[3: -3]), fp(u[5: -1]) - fp(u[4: -2]))
-                  + phi_N(fm(u[6:   ]) - fm(u[5: -1]), fm(u[5: -1]) - fm(u[4: -2]), fm(u[4: -2]) - fm(u[3: -3]), fm(u[3: -3]) - fm(u[2: -4])))
+                  + phi_N(fm(u[5: -1]) - fm(u[6:   ]), fm(u[4: -2]) - fm(u[5: -1]), fm(u[3: -3]) - fm(u[4: -2]), fm(u[2: -4]) - fm(u[3: -3])))
     
     fhat_left  = np.reshape(np.zeros(nr), (nr, 1))
     fhat_left[3: -3]  = (1/12 * (-f(u[1: -5]) + 7 * f(u[2: -4]) + 7 * f(u[3: -3]) - f(u[4: -2]))
                   - phi_N(fp(u[1: -5]) - fp(u[0: -6]), fp(u[2: -4]) - fp(u[1: -5]), fp(u[3: -3]) - fp(u[2: -4]), fp(u[4: -2]) - fp(u[3: -3]))
-                  + phi_N(fm(u[5: -1]) - fm(u[4: -2]), fm(u[4: -2]) - fm(u[3: -3]), fm(u[3: -3]) - fm(u[2: -4]), fm(u[2: -4]) - fm(u[1: -5])))
+                  + phi_N(fm(u[4: -2]) - fm(u[5: -1]), fm(u[3: -3]) - fm(u[4: -2]), fm(u[2: -4]) - fm(u[3: -3]), fm(u[1: -5]) - fm(u[2: -4])))
     
     df_dr = np.reshape(np.zeros(nr), (nr, 1))
     df_dr[3: -3] = 1/dr * (fhat_right[3: -3] - fhat_left[3: -3])
@@ -467,9 +486,12 @@ def plot_mode(i):
     plt.ylabel('z')
     plt.show()
 
+######################################
 
 ## GRID SIZE, EQUILIBRIUM
-nr, dr, r, rr = grid(size=400, max=5.0, ghost=1)
+## GHOST = 1: LINEAR STABILITY
+## GHOST = 3: TIME EVOLUTION
+nr, dr, r, rr = grid(size=200, max=5.0, ghost=1)
 rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 
 # plt.plot(r[gh: -gh], B_0[gh: -gh], r[gh: -gh], rho_0[gh: -gh], r[gh: -gh], J_0[gh: -gh])
@@ -478,14 +500,14 @@ rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 # test(B_0, t_max, WENO, f, fp, fm, phi_N)
 
 ## PARAMETERS
-# k = 1
-# m = 0
-# D_eta = 1e-4
-# D_H = 0.3
-# D_P = 0
-# nz, dz, z, zz = grid(size=400, max=2*np.pi/k)
-# z_osc = np.exp(1j * k * zz)
-# G = create_G(nr)
+k = 1
+m = 0
+D_eta = 1
+D_H = 0.15
+D_P = 0
+nz, dz, z, zz = grid(size=200, max=2*np.pi/k)
+z_osc = np.exp(1j * k * zz)
+G = create_G()
 
 ## TIME EVOLUTION
 # B_1 = 2 * B_0.copy()
@@ -501,16 +523,16 @@ rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 
 ## DISPERSION
 # k_min = 0.5
-# k_max = 10
+# k_max = 4
 # dk = 0.5
 # nk = 1 + (k_max - k_min)/dk
 # kk = np.linspace(k_min, k_max, nk)
-# gamma_vs_k(G, rr, nr, dr, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M)
+# gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M)
 
 ## EIGENSYSTEM
-# M = create_M(rr, nr, dr, rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
+M = create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
 # plot_eigenvalues(M, G)
-# plot_mode(1)
+plot_mode(1)
 
 
 
