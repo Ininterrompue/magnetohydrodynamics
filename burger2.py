@@ -15,35 +15,49 @@ def grid(size=10, max=1, ghost=1):
     return nx, dx, x, xx
 
 
-# Testing inviscid 1D Burger's equation
+# Testing inviscid 1D Burgers' equation
 def test(u, t_max, WENO, fhat, f, fp, fm, SI_weights):
     dt = dr / 2
     t = 0
+    u_WENO = u
+    u_Euler = u
     
     while t < t_max:
         t = t + dt
-        u_temp = u.copy()
-        u = runge_kutta(WENO, fhat, f, fp, fm, SI_weights, u_temp, dt)
+        u_WENO_temp = u_WENO.copy()
+        u_Euler_temp = u_Euler.copy()
+        u_WENO = runge_kutta(WENO, fhat, f, fp, fm, SI_weights, u_WENO_temp, dt)
+        u_Euler = runge_kutta2(Euler, u_Euler_temp, dt)
 #         u[-3] = u[0]
 #         u[-2] = u[1]
 #         u[-1] = u[2]
         
-    plt.plot(r[3: -3], u[3: -3], r[3: -3], u_0[3: -3])
-    plt.legend(['u', 'u_0'])
+    plt.plot(r[3: -3], u_0[3: -3], r[3: -3], u_Euler[3: -3], r[3: -3], u_WENO[3: -3])
+    plt.legend(['u_0', 'u_Euler', 'u_WENO'])
     plt.xlabel('x')
     plt.title('Time evolution')
     plt.show()
 
     
 def runge_kutta(WENO, fhat, f, fp, fm, SI_weights, u, dt):
-    u1 = np.reshape(np.zeros(nr), (nr, 1))
-    u2 = np.reshape(np.zeros(nr), (nr, 1))
-    u3 = np.reshape(np.zeros(nr), (nr, 1))
-    u1 = u + dt * WENO(fhat, f, fp, fm, SI_weights, u)
-    u2 = 3/4 * u + 1/4 * u1 + 1/4 * dt * WENO(fhat, f, fp, fm, SI_weights, u1)
-    u3 = 1/3 * u + 2/3 * u2 + 2/3 * dt * WENO(fhat, f, fp, fm, SI_weights, u2)
+    u1_WENO = u + dt * WENO(fhat, f, fp, fm, SI_weights, u)
+    u2_WENO = 3/4 * u + 1/4 * u1_WENO + 1/4 * dt * WENO(fhat, f, fp, fm, SI_weights, u1_WENO)
+    u3_WENO = 1/3 * u + 2/3 * u2_WENO + 2/3 * dt * WENO(fhat, f, fp, fm, SI_weights, u2_WENO)
     
-    return u3
+    return u3_WENO
+
+
+def runge_kutta2(Euler, u, dt):
+    u1_Euler = u + dt * Euler(u)
+    u2_Euler = 3/4 * u + 1/4 * u1_Euler + 1/4 * dt * Euler(u1_Euler)
+    u3_Euler = 1/3 * u + 2/3 * u2_Euler + 2/3 * dt * Euler(u2_Euler) 
+    
+    return u3_Euler
+
+def Euler(u):
+    du_dx = np.reshape(np.zeros(nr), (nr, 1))
+    du_dx[1: -1] = -u[1: -1] / (2 * dr) * (u[2: ] - u[0: -2])
+    return du_dx
 
 
 # FLUX
@@ -62,7 +76,8 @@ def fm(f, u):
 # Output is a spatial derivative only
 def WENO(fhat, f, fp, fm, SI_weights, u):
     df_dr = np.reshape(np.zeros(nr), (nr, 1))
-    df_dr[3: -3] = -1/dr * (fhat(1, 0, f, fp, fm, SI_weights, u) + fhat(-1, 0, f, fp, fm, SI_weights, u) - fhat(1, -1, f, fp, fm, SI_weights, u) - fhat(-1, -1, f, fp, fm, SI_weights, u))
+    df_dr[3: -3] = -1/dr * (fhat(1, +0, f, fp, fm, SI_weights, u) + fhat(-1, +0, f, fp, fm, SI_weights, u) 
+                         -  fhat(1, -1, f, fp, fm, SI_weights, u) - fhat(-1, -1, f, fp, fm, SI_weights, u))
     
     return df_dr
 
@@ -124,12 +139,12 @@ def SI_weights(pm, g, f, fp, fm, u):
 
 
 ## GRID SIZE
-nr, dr, r, rr = grid(size=100, max=10, ghost=3)
+nr, dr, r, rr = grid(size=200, max=10, ghost=3)
 
 global u_0
 u_0 = np.exp(-(rr-5)**2)
 u = u_0.copy()
-test(u, 2, WENO, fhat, f, fp, fm, SI_weights)
+test(u, 1.2, WENO, fhat, f, fp, fm, SI_weights)
 
 
 

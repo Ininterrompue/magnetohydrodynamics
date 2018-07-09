@@ -123,19 +123,24 @@ def create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     m_rho_Vtheta = zero_out(np.diagflat(2 * np.pi * m * rho_0 / rr, 0))
     m_rho_Vz = zero_out(np.diagflat(k * rho_0, 0))
     
-    m_Br_Vr = zero_out(np.diagflat(-2 * np.pi * m * B_0 / rr, 0))
+    m_Br_Vr = zero_out(np.diagflat(-2 * np.pi * m * B_0 / rr - B_Z0 * k, 0))
     
     m_Btheta_Vr = zero_out(-1j * DV_product(B_0))
+    m_Btheta_Vtheta = zero_out(B_Z0 * k * np.identity(nr))
+
     m_Btheta_Vz = zero_out(np.diagflat(k * B_0, 0))
     
+    m_Bz_Vr = zero_out(1j * B_Z0 / rr * DV_product(rr))
     m_Bz_Vz = zero_out(np.diagflat(-2 * np.pi * m * B_0 / rr, 0))
     
     m_Vr_rho = zero_out(-2j / rho_0 * FD_matrix(1))
-    m_Vr_Br = zero_out(np.diagflat(-m * B_0 / (2 * rho_0 * rr), 0))
+    m_Vr_Br = zero_out(np.diagflat(-m * B_0 / (2 * rho_0 * rr) - B_Z0 * k / (4 * np.pi * rho_0), 0))
     m_Vr_Btheta = zero_out(-1j / (4 * np.pi * rho_0 * rr**2) * DV_product(rr**2 * B_0))
+    m_Vr_Bz = zero_out(-1j * B_Z0 / (4 * np.pi * rho_0) * FD_matrix(1))
     
     m_Vtheta_rho = zero_out(np.diagflat(4 * np.pi * m / (rr * rho_0), 0)) 
-    
+    m_Vtheta_Btheta = zero_out(np.diagflat(-B_Z0 * k / (4 * np.pi * rho_0), 0))
+
     m_Vz_rho = zero_out(np.diagflat(2.0 * k / rho_0, 0))
     m_Vz_Btheta = zero_out(np.diagflat(k * B_0 / (4.0 * np.pi * rho_0), 0))
     m_Vz_Bz = zero_out(np.diagflat(-B_0 * m / (2 * rho_0 * rr), 0))
@@ -170,17 +175,17 @@ def create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
     m_rho_rho = BC(m_rho_rho, 1, 0)
     m_Br_Br = BC(m_Br_Br, 0, 0)
     m_Btheta_Btheta = BC(m_Btheta_Btheta, 0, 0)
-    m_Bz_Bz = BC(m_Bz_Bz, 0, 0)
+    m_Bz_Bz = BC(m_Bz_Bz, 1, 1)
     m_Vr_Vr = BC(m_Vr_Vr, 0, 1)
-    m_Vtheta_Vtheta = BC(m_Vtheta_Vtheta, 0, 1)
+    m_Vtheta_Vtheta = BC(m_Vtheta_Vtheta, 0, 0)
     m_Vz_Vz = BC(m_Vz_Vz, 1, 1)
     
     M = np.block([[m_rho_rho, m0, m0, m0, m_rho_Vr, m_rho_Vtheta, m_rho_Vz], 
 				[m0, m_Br_Br, m0, m0, m_Br_Vr, m0, m0], 
-				[m_Btheta_rho, m0, m_Btheta_Btheta, m0, m_Btheta_Vr, m0, m_Btheta_Vz], 
-				[m0, m_Bz_Br, m0, m_Bz_Bz, m0, m0, m_Bz_Vz],
-				[m_Vr_rho, m_Vr_Br, m_Vr_Btheta, m0, m_Vr_Vr, m0, m0],
-				[m_Vtheta_rho, m0, m0, m0, m0, m_Vtheta_Vtheta, m0],
+				[m_Btheta_rho, m0, m_Btheta_Btheta, m0, m_Btheta_Vr, m_Btheta_Vtheta, m_Btheta_Vz], 
+				[m0, m_Bz_Br, m0, m_Bz_Bz, m_Bz_Vr, m0, m_Bz_Vz],
+				[m_Vr_rho, m_Vr_Br, m_Vr_Btheta, m_Vr_Bz, m_Vr_Vr, m0, m0],
+				[m_Vtheta_rho, m0, m_Vtheta_Btheta, m0, m0, m_Vtheta_Vtheta, m0],
 				[m_Vz_rho, m0, m_Vz_Btheta, m_Vz_Bz, m0, m0, m_Vz_Vz]])
 
     return M
@@ -190,7 +195,7 @@ def gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M)
     gamma = []
     for K in kk: 
 	    M = create_M(rho_0, B_0, FD_matrix, K, zero_out, BC, DV_product)
-	    eval = eigs(M, k=1, M=G, sigma=20j, which='LI', return_eigenvectors=False)
+	    eval = eigs(M, k=1, M=G, sigma=5j, which='LI', return_eigenvectors=False)
 	    gamma.append(eval.imag)
 
     plt.plot(kk, gamma)
@@ -224,92 +229,6 @@ def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, cre
 #     plt.title('Integral of imaginary part of rho')
 #     plt.xlabel('nr')
     plt.show()
-
-
-# def L(WENO, f, fp, fm, phi_N, u):
-#     udv2 = np.reshape(np.zeros(nr), (nr, 1))
-#     udv2[1: -1] = 1 / dr**2 * (u[0: -2] - 2 * u[1: -1] + u[2: ])
-#     return WENO(f, fp, fm, phi_N, u)
-
-
-def runge_kutta(WENO, f, fp, fm, phi_N, u, dt):
-    u1 = np.reshape(np.zeros(nr), (nr, 1))
-    u2 = np.reshape(np.zeros(nr), (nr, 1))
-    u3 = np.reshape(np.zeros(nr), (nr, 1))
-    u1 = u + dt * WENO(f, fp, fm, phi_N, u)
-    u2 = 3/4 * u + 1/4 * u1 + 1/4 * dt * WENO(f, fp, fm, phi_N, u1)
-    u3 = 1/3 * u + 2/3 * u2 + 2/3 * dt * WENO(f, fp, fm, phi_N, u2)
-    
-    return u3
-
-
-# Testing inviscid 1D Burger's equation
-def test(B_0, t_max, WENO, f, fp, fm, phi_N):
-    B = B_0
-    dt = dr**2 / 2
-    t = 0
-    while t < t_max:
-        t = t + dt
-        B_temp = B.copy()
-        B = runge_kutta(WENO, f, fp, fm, phi_N, B_temp, dt)
-        B[0] = 0
-        B[-1] = B[-2] * r[-2] / r[-1]
-        
-    plt.plot(r[1: -1], B[1: -1])
-    plt.legend(['B'])
-    plt.xlabel('r/r0')
-    plt.title('Time evolution')
-    plt.show()      
-
-
-def phi_N(a, b, c, d):
-    # Small parameter to avoid division by 0 in Weights
-    epsilon = 1e-6
-    
-    # Smoothness indicators
-    IS0 = 13 * (a - b)**2 + 3 * (a - 3*b)**2
-    IS1 = 13 * (b - c)**2 + 3 * (b + c)**2
-    IS2 = 13 * (c - d)**2 + 3 * (3*c - d)**2
-    
-    # Weights
-    alpha0 = 1 / (epsilon + IS0)**2
-    alpha1 = 6 / (epsilon + IS1)**2
-    alpha2 = 3 / (epsilon + IS2)**2
-    omega0 = alpha0 / (alpha0 + alpha1 + alpha2)
-    omega2 = alpha2 / (alpha0 + alpha1 + alpha2)
-    
-    return 1/3 * omega0 * (a - 2*b + c) + 1/6 * (omega2 - 1/2) * (b - 2*c + d)
-    
-    
-def f(u):
-    return 1/2 * u**2
-    
-    
-def fp(f, u):
-    alpha = max(u)
-    return 1/2 * (f(u) + alpha * u)
-def fm(f, u):
-    alpha = max(u)
-    return 1/2 * (f(u) - alpha * u)    
- 
-   
-def WENO(f, fp, fm, phi_N, u):
-    
-    # CHECK NEGATIVE FLUX COMPONENTS
-    fhat_right = np.reshape(np.zeros(nr), (nr, 1))
-    fhat_right[3: -3] = (1/12 * (-f(u[2: -4]) + 7 * f(u[3: -3]) + 7 * f(u[4: -2]) - f(u[5: -1]))
-                  - phi_N(fp(u[2: -4]) - fp(u[1: -5]), fp(u[3: -3]) - fp(u[2: -4]), fp(u[4: -2]) - fp(u[3: -3]), fp(u[5: -1]) - fp(u[4: -2]))
-                  + phi_N(fm(u[5: -1]) - fm(u[6:   ]), fm(u[4: -2]) - fm(u[5: -1]), fm(u[3: -3]) - fm(u[4: -2]), fm(u[2: -4]) - fm(u[3: -3])))
-    
-    fhat_left  = np.reshape(np.zeros(nr), (nr, 1))
-    fhat_left[3: -3]  = (1/12 * (-f(u[1: -5]) + 7 * f(u[2: -4]) + 7 * f(u[3: -3]) - f(u[4: -2]))
-                  - phi_N(fp(u[1: -5]) - fp(u[0: -6]), fp(u[2: -4]) - fp(u[1: -5]), fp(u[3: -3]) - fp(u[2: -4]), fp(u[4: -2]) - fp(u[3: -3]))
-                  + phi_N(fm(u[4: -2]) - fm(u[5: -1]), fm(u[3: -3]) - fm(u[4: -2]), fm(u[2: -4]) - fm(u[3: -3]), fm(u[1: -5]) - fm(u[2: -4])))
-    
-    df_dr = np.reshape(np.zeros(nr), (nr, 1))
-    df_dr[3: -3] = 1/dr * (fhat_right[3: -3] - fhat_left[3: -3])
-    
-    return df_dr
 
 
 def pinch(rho, B, rr, nr, dr, t_max):
@@ -497,15 +416,15 @@ rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 # plt.plot(r[gh: -gh], B_0[gh: -gh], r[gh: -gh], rho_0[gh: -gh], r[gh: -gh], J_0[gh: -gh])
 # plt.show()
 
-# test(B_0, t_max, WENO, f, fp, fm, phi_N)
 
 ## PARAMETERS
 k = 1
 m = 0
-D_eta = 1
-D_H = 0.15
+D_eta = 1e-10
+D_H = 0
 D_P = 0
-nz, dz, z, zz = grid(size=200, max=2*np.pi/k)
+B_Z0 = 0.2
+nz, dz, z, zz = grid(size=100, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G()
 
@@ -522,16 +441,16 @@ G = create_G()
 # convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
 
 ## DISPERSION
-# k_min = 0.5
-# k_max = 4
-# dk = 0.5
+# k_min = 1
+# k_max = 6
+# dk = 0.25
 # nk = 1 + (k_max - k_min)/dk
 # kk = np.linspace(k_min, k_max, nk)
 # gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M)
 
 ## EIGENSYSTEM
 M = create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
-# plot_eigenvalues(M, G)
+plot_eigenvalues(M, G)
 plot_mode(1)
 
 
