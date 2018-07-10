@@ -17,13 +17,14 @@ def grid(size=10, max=1, ghost=1):
 
 # Testing inviscid 1D Burgers' equation
 def test(u, t_max, WENO, fhat, f, fp, fm, SI_weights):
-    dt = dr / 2
+    dt = dr / 2 * 0.4
     t = 0
     u_WENO = u
     u_Euler = u
     
     while t < t_max:
         t = t + dt
+        print(t)
         u_WENO_temp = u_WENO.copy()
         u_Euler_temp = u_Euler.copy()
         u_WENO = runge_kutta(WENO, fhat, f, fp, fm, SI_weights, u_WENO_temp, dt)
@@ -31,9 +32,16 @@ def test(u, t_max, WENO, fhat, f, fp, fm, SI_weights):
 #         u[-3] = u[0]
 #         u[-2] = u[1]
 #         u[-1] = u[2]
+    
+    u_a = 0.5 - 0.5 * np.tanh((rr - 5 - 0.5 * t) / (4 * nu))
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
         
-    plt.plot(r[3: -3], u_0[3: -3], r[3: -3], u_Euler[3: -3], r[3: -3], u_WENO[3: -3])
-    plt.legend(['u_0', 'u_Euler', 'u_WENO'])
+    
+    ax1.scatter(r[3: -3], u_Euler[3: -3], marker='o', s=4)
+    ax1.scatter(r[3: -3], u_WENO[3: -3], marker='s', s=4)
+    ax1.plot(r[3: -3], u_a[3: -3], color='gray', linewidth=1)
+    plt.legend(['u_Exact', 'u_Euler', 'u_WENO'])
     plt.xlabel('x')
     plt.title('Time evolution')
     plt.show()
@@ -56,7 +64,7 @@ def runge_kutta2(Euler, u, dt):
 
 def Euler(u):
     du_dx = np.reshape(np.zeros(nr), (nr, 1))
-    du_dx[1: -1] = -u[1: -1] / (2 * dr) * (u[2: ] - u[0: -2])
+    du_dx[1: -1] = -u[1: -1] / (2 * dr) * (u[2: ] - u[0: -2]) + nu / dr**2 * (u[2: ] - 2 * u[1: -1] + u[0: -2])
     return du_dx
 
 
@@ -77,7 +85,7 @@ def fm(f, u):
 def WENO(fhat, f, fp, fm, SI_weights, u):
     df_dr = np.reshape(np.zeros(nr), (nr, 1))
     df_dr[3: -3] = -1/dr * (fhat(1, +0, f, fp, fm, SI_weights, u) + fhat(-1, +0, f, fp, fm, SI_weights, u) 
-                         -  fhat(1, -1, f, fp, fm, SI_weights, u) - fhat(-1, -1, f, fp, fm, SI_weights, u))
+                         -  fhat(1, -1, f, fp, fm, SI_weights, u) - fhat(-1, -1, f, fp, fm, SI_weights, u)) + nu / dr**2 * (u[4: -2] - 2 * u[3: -3] + u[2: -4]) 
     
     return df_dr
 
@@ -139,12 +147,16 @@ def SI_weights(pm, g, f, fp, fm, u):
 
 
 ## GRID SIZE
-nr, dr, r, rr = grid(size=200, max=10, ghost=3)
+nr, dr, r, rr = grid(size=100, max=10, ghost=3)
 
-global u_0
-u_0 = np.exp(-(rr-5)**2)
+global u_0, nu
+nu = 0.001
+u_0 = 0.5 - 0.5 * np.tanh((rr - 5) / (4 * nu))
 u = u_0.copy()
-test(u, 1.2, WENO, fhat, f, fp, fm, SI_weights)
+
+# plt.plot(r[1: -1], u_0[1: -1])
+# plt.show()
+test(u, 0.1, WENO, fhat, f, fp, fm, SI_weights)
 
 
 

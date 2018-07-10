@@ -34,7 +34,7 @@ def FD_matrix(order):
     
 
 def equilibrium(FD_matrix, zero_out):
-    P = np.exp(-rr**4) + 0.05
+    P = np.exp(-(rr/1)**4) + 0.05
     lhs = zero_out(FD_matrix(1) / 2 + dia_matrix((1.0 / r, 0), shape=(nr, nr)).toarray())
     rhs = -FD_matrix(1) @ P
     
@@ -130,7 +130,7 @@ def create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
 
     m_Btheta_Vz = zero_out(np.diagflat(k * B_0, 0))
     
-    m_Bz_Vr = zero_out(1j * B_Z0 / rr * DV_product(rr))
+    m_Bz_Vr = zero_out(-1j * B_Z0 / rr * DV_product(rr))
     m_Bz_Vz = zero_out(np.diagflat(-2 * np.pi * m * B_0 / rr, 0))
     
     m_Vr_rho = zero_out(-2j / rho_0 * FD_matrix(1))
@@ -194,9 +194,10 @@ def create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product):
 def gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M):
     gamma = []
     for K in kk: 
-	    M = create_M(rho_0, B_0, FD_matrix, K, zero_out, BC, DV_product)
-	    eval = eigs(M, k=1, M=G, sigma=5j, which='LI', return_eigenvectors=False)
-	    gamma.append(eval.imag)
+        print(K)
+        M = create_M(rho_0, B_0, FD_matrix, K, zero_out, BC, DV_product)
+        eval = eigs(M, k=1, M=G, sigma=3j, which='LI', return_eigenvectors=False)
+        gamma.append(eval.imag)
 
     plt.plot(kk, gamma)
     plt.title('Largest mode')
@@ -410,7 +411,7 @@ def plot_mode(i):
 ## GRID SIZE, EQUILIBRIUM
 ## GHOST = 1: LINEAR STABILITY
 ## GHOST = 3: TIME EVOLUTION
-nr, dr, r, rr = grid(size=200, max=5.0, ghost=1)
+nr, dr, r, rr = grid(size=100, max=15.0, ghost=1)
 rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 
 # plt.plot(r[gh: -gh], B_0[gh: -gh], r[gh: -gh], rho_0[gh: -gh], r[gh: -gh], J_0[gh: -gh])
@@ -418,13 +419,13 @@ rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 
 
 ## PARAMETERS
-k = 1
+k = 20
 m = 0
-D_eta = 1e-10
+D_eta = 1e-6
 D_H = 0
 D_P = 0
-B_Z0 = 0.2
-nz, dz, z, zz = grid(size=100, max=2*np.pi/k)
+B_Z0 = 0
+nz, dz, z, zz = grid(size=200, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G()
 
@@ -441,17 +442,17 @@ G = create_G()
 # convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
 
 ## DISPERSION
-# k_min = 1
-# k_max = 6
-# dk = 0.25
-# nk = 1 + (k_max - k_min)/dk
-# kk = np.linspace(k_min, k_max, nk)
-# gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M)
+k_min = 0.1
+k_max = 10
+dk = 0.1
+nk = 1 + (k_max - k_min)/dk
+kk = np.linspace(k_min, k_max, nk)
+gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M)
 
 ## EIGENSYSTEM
-M = create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
-plot_eigenvalues(M, G)
-plot_mode(1)
+# M = create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
+# plot_eigenvalues(M, G)
+# plot_mode(1)
 
 
 
