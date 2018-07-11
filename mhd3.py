@@ -252,7 +252,7 @@ def pinch(rho, B, rr, nr, dr, t_max):
         Vr_temp = Vr.copy()       
 
         v_A = max(B / np.sqrt(4 * np.pi * np.abs(rho)))
-        dt = dr / (15 * v_A)
+        dt = dr / (20 * v_A)
         t = t + dt
         print(v_A, t)
                 
@@ -419,7 +419,7 @@ def plot_mode(i):
 ## GRID SIZE, EQUILIBRIUM
 ## GHOST = 1: LINEAR STABILITY
 ## GHOST = 3: TIME EVOLUTION
-nr, dr, r, rr = grid(size=100, max=8.0, ghost=1)
+nr, dr, r, rr = grid(size=200, max=5.0, ghost=1)
 rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 
 # plt.plot(r[gh: -gh], B_0[gh: -gh], r[gh: -gh], rho_0[gh: -gh], r[gh: -gh], J_0[gh: -gh])
@@ -427,19 +427,19 @@ rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 
 
 ## PARAMETERS
-k = 10
+k = 1
 m = 0
-D_eta = 1
+D_eta = 0
 D_H = 0
 D_P = 0
-B_Z0 = 0.1
+B_Z0 = 0
 nz, dz, z, zz = grid(size=200, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G()
 
 ## TIME EVOLUTION
-# B_1 = 2 * B_0.copy()
-# pinch(rho_0, B_1, rr, nr, dr, 0.3)
+# rho_1 = 0.5 * rho_0.copy()
+# pinch(rho_1, B_0, rr, nr, dr, 0.52)
 
 ## CONVERGENCE TEST
 # res_min = 20
@@ -450,12 +450,12 @@ G = create_G()
 # convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
 
 ## DISPERSION
-k_min = 1
-k_max = 25
-dk = 0.5
-nk = 1 + (k_max - k_min) / dk
-kk = np.linspace(k_min, k_max, nk)
-gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M)
+# k_min = 1
+# k_max = 25
+# dk = 0.5
+# nk = 1 + (k_max - k_min) / dk
+# kk = np.linspace(k_min, k_max, nk)
+# gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M)
 
 # gammas = []
 # bz = np.linspace(0, 0.6, 61)
@@ -470,9 +470,9 @@ gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M)
 # plt.show()
 
 ## EIGENSYSTEM
-# M = create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
-# # plot_eigenvalues(M, G)
-# plot_mode(1)
+M = create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
+# plot_eigenvalues(M, G)
+plot_mode(1)
 
 
 
