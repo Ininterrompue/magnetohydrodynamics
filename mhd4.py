@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.linalg import eig
 
-sys = MHDSystem(N_r=200, r_max=5)
+sys = MHDSystem(N_r=100, r_max=5)
 pressure = np.exp(-sys.grid.rr**4) + 0.05
 equ = MHDEquilibrium(sys, pressure)
 

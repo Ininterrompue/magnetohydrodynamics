@@ -419,7 +419,7 @@ def plot_mode(i):
 ## GRID SIZE, EQUILIBRIUM
 ## GHOST = 1: LINEAR STABILITY
 ## GHOST = 3: TIME EVOLUTION
-nr, dr, r, rr = grid(size=200, max=5.0, ghost=1)
+nr, dr, r, rr = grid(size=100, max=5.0, ghost=1)
 rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 
 # plt.plot(r[gh: -gh], B_0[gh: -gh], r[gh: -gh], rho_0[gh: -gh], r[gh: -gh], J_0[gh: -gh])
@@ -429,10 +429,10 @@ rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 ## PARAMETERS
 k = 1
 m = 0
-D_eta = 0
+D_eta = 1
 D_H = 0
 D_P = 0
-B_Z0 = 0
+B_Z0 = 0.2
 nz, dz, z, zz = grid(size=200, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G()

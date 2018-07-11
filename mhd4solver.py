@@ -1,5 +1,5 @@
 import numpy as np
-import scipy
+from scipy.linalg import eig
 from scipy.sparse import dia_matrix
 import matplotlib.pyplot as plt
 
@@ -137,6 +137,7 @@ class LinearizedMHD:
         self.evals = None
         self.evects = None
         self.set_z_mode(k, D_eta, D_H, D_P, B_Z0)
+        self.k = k
 
     def set_z_mode(self, k, D_eta, D_H, D_P, B_Z0):
         self.fd_operator = self.construct_operator(k, D_eta, D_H, D_P, B_Z0)
@@ -197,7 +198,7 @@ class LinearizedMHD:
                                    - fd.diag(1j * (fd.ddr(1) @ (1 / rho)) * 1 / rr * (fd.ddr(1) @ (rr * B))))    
         
         # Electron pressure term (Terms including B_Z0 have not been added yet)
-        m_Btheta_rho = m_Btheta_rho + D_P * fd.diag(k * (1 / rho**2 * (fd.ddr(1) @ rho) + fd.ddr(1) @ (1 / rho)))
+        m_Btheta_rho = m_Btheta_rho + D_P * fd.diag(k * (1 / rho**2 * (fd.ddr(1) @ rho) + (fd.ddr(1) @ (1 / rho))))
         
         # Boundary conditions
         m_rho_rho       = m_rho_rho       + fd.lhs_bc('derivative') + fd.rhs_bc('value')
@@ -220,7 +221,7 @@ class LinearizedMHD:
     def construct_rhs(self):
         # Generalized eigenvalue problem matrix
         nr = self.equilibrium.sys.grid.N
-        G = -np.identity(7 * nr)
+        G = np.identity(7 * nr)
         G[0, 0] = G[nr - 1, nr - 1] = G[nr, nr] = G[2*nr - 1, 2*nr - 1] = 0
         G[2*nr, 2*nr] = G[3*nr - 1, 3*nr - 1] = G[3*nr, 3*nr] = 0
         G[4*nr - 1, 4*nr - 1] = G[4*nr, 4*nr] = G[5*nr - 1, 5*nr - 1] = 0
@@ -229,7 +230,7 @@ class LinearizedMHD:
         return G
 
     def solve(self):
-        self.evals, self.evects = scipy.linalg.eig(self.fd_operator, self.fd_rhs)
+        self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
 
     # ith mode by magnitude of imaginary part
     def plot_mode(self, i):
@@ -238,6 +239,10 @@ class LinearizedMHD:
 
         nr = self.equilibrium.sys.grid.N
         r = self.equilibrium.sys.grid.r
+        z = self.equilibrium.sys.grid.r
+        zz = self.equilibrium.sys.grid.rr
+        rho_0 = self.equilibrium.rho
+        B_0 = self.equilibrium.B
 
         index = np.argsort(self.evals.imag)
 
@@ -252,7 +257,8 @@ class LinearizedMHD:
         V_theta = v_omega[5*nr: 6*nr]
         V_z = v_omega[6*nr: 7*nr]
         phase = np.exp(-1j * np.angle(rho[0]))
-
+        
+        # 1D eigenvectors
         f = plt.figure()
         f.suptitle(omega.imag)
 
@@ -298,15 +304,67 @@ class LinearizedMHD:
 
         plt.show()
         
-        # 2D quiver plot
-#         R, Z = np.meshgrid(r[1: -1], z[1: -1])
-#         d_vec = 10
-#         plt.quiver(R[::d_vec, ::d_vec], 
-#                    Z[::d_vec, ::d_vec], 
-#                    V_r_contour[::d_vec, ::d_vec], 
-#                    V_z_contour[::d_vec, ::d_vec], pivot='mid', width=0.004)
-#         plt.title('Flow velocity')
-#         plt.show()
+        # 2D contour plots
+        z_osc = np.exp(1j * self.k * zz)
+        rho_contour = rho_0[1: -1].T + f1(z_osc[1: -1] * phase * rho[1: -1])
+        B_r_contour = f1(z_osc[1: -1] * phase * B_r[1: -1])
+        B_theta_contour = B_0[1: -1].T + f1(z_osc[1: -1] * phase * B_theta[1: -1])
+        B_z_contour = f1(z_osc[1: -1] * phase * B_z[1: -1])
+        V_r_contour = f1(z_osc[1: -1] * phase * V_r[1: -1])
+        V_theta_contour = f1(z_osc[1: -1] * phase * V_theta[1: -1])
+        V_z_contour = f1(z_osc[1: -1] * phase * V_z[1: -1])
+        
+        f = plt.figure()
+        f.suptitle(omega.imag)
+        R, Z = np.meshgrid(r[1: -1], z[1: -1])
+    
+        ax = plt.subplot(3,3,1)
+        ax.set_title('B_r')
+        plot_1 = ax.contourf(R, Z, B_r_contour, 100)
+        plt.colorbar(plot_1)
+    
+        ax = plt.subplot(3,3,2)
+        ax.set_title('B_theta')
+        plot_2 = ax.contourf(R, Z, B_theta_contour, 100)
+        plt.colorbar(plot_2)
+    
+        ax = plt.subplot(3,3,3)
+        ax.set_title('B_z')
+        plot_3 = ax.contourf(R, Z, B_z_contour, 100)
+        plt.colorbar(plot_3)
+    
+        ax = plt.subplot(3,3,4)
+        ax.set_title('V_r')
+        plot_4 = ax.contourf(R, Z, V_r_contour, 100)
+        plt.colorbar(plot_4)
+        
+        ax = plt.subplot(3,3,5)
+        ax.set_title('V_theta')
+        plot_5 = ax.contourf(R, Z, V_theta_contour, 100)
+        plt.colorbar(plot_5)
+    
+        ax = plt.subplot(3,3,6)
+        ax.set_title('V_z')
+        plot_6 = ax.contourf(R, Z, V_z_contour, 100)
+        plt.colorbar(plot_6)
+    
+        ax = plt.subplot(3,3,7)
+        ax.set_title('rho')
+        plot_7 = ax.contourf(R, Z, rho_contour, 100)
+        plt.colorbar(plot_7)
+    
+        plt.show()
+    
+        # 2D quiver plot of V
+        R, Z = np.meshgrid(r[1: -1], z[1: -1])
+        d_vec = 10
+        plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
+                   V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], 
+                   pivot='mid', width=0.004, scale=3.5)
+        plt.title('Flow velocity')
+        plt.xlabel('r')
+        plt.ylabel('z')
+        plt.show()
 
     def plot_eigenvalues(self):
         if self.evals is None:
