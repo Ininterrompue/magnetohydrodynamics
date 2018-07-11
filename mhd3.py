@@ -196,14 +196,22 @@ def gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M)
     for K in kk: 
         print(K)
         M = create_M(rho_0, B_0, FD_matrix, K, zero_out, BC, DV_product)
-        eval = eigs(M, k=1, M=G, sigma=3j, which='LI', return_eigenvectors=False)
+        eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
         gamma.append(eval.imag)
-
+    
     plt.plot(kk, gamma)
     plt.title('Largest mode')
     plt.xlabel('k')
     plt.ylabel('gamma')
     plt.show()
+    
+def extract_gamma(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M):
+    gamma = []
+    for K in kk: 
+        M = create_M(rho_0, B_0, FD_matrix, K, zero_out, BC, DV_product)
+        eval = eigs(M, k=1, M=G, sigma=2j, which='LI', return_eigenvectors=False)
+        gamma.append(eval.imag)
+    return max(gamma)    
 
 
 def convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G):
@@ -411,7 +419,7 @@ def plot_mode(i):
 ## GRID SIZE, EQUILIBRIUM
 ## GHOST = 1: LINEAR STABILITY
 ## GHOST = 3: TIME EVOLUTION
-nr, dr, r, rr = grid(size=100, max=15.0, ghost=1)
+nr, dr, r, rr = grid(size=100, max=8.0, ghost=1)
 rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 
 # plt.plot(r[gh: -gh], B_0[gh: -gh], r[gh: -gh], rho_0[gh: -gh], r[gh: -gh], J_0[gh: -gh])
@@ -419,12 +427,12 @@ rho_0, B_0, J_0 = equilibrium(FD_matrix, zero_out)
 
 
 ## PARAMETERS
-k = 20
+k = 10
 m = 0
-D_eta = 1e-6
+D_eta = 1
 D_H = 0
 D_P = 0
-B_Z0 = 0
+B_Z0 = 0.1
 nz, dz, z, zz = grid(size=200, max=2*np.pi/k)
 z_osc = np.exp(1j * k * zz)
 G = create_G()
@@ -442,16 +450,28 @@ G = create_G()
 # convergence(grid, res, FD_matrix, equilibrium, zero_out, BC, DV_product, create_G)
 
 ## DISPERSION
-k_min = 0.1
-k_max = 10
-dk = 0.1
-nk = 1 + (k_max - k_min)/dk
+k_min = 1
+k_max = 25
+dk = 0.5
+nk = 1 + (k_max - k_min) / dk
 kk = np.linspace(k_min, k_max, nk)
 gamma_vs_k(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M)
 
+# gammas = []
+# bz = np.linspace(0, 0.6, 61)
+# for BZ in bz: 
+#     B_Z0 = BZ
+#     print(B_Z0)
+#     gammas.append(extract_gamma(G, rho_0, B_0, FD_matrix, kk, zero_out, BC, DV_product, create_M))
+# plt.plot(bz, gammas)
+# plt.xlabel('B_Z0')
+# plt.ylabel('gamma')
+# plt.title('Resistive MHD stability')
+# plt.show()
+
 ## EIGENSYSTEM
 # M = create_M(rho_0, B_0, FD_matrix, k, zero_out, BC, DV_product)
-# plot_eigenvalues(M, G)
+# # plot_eigenvalues(M, G)
 # plot_mode(1)
 
 
