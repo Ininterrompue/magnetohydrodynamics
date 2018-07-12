@@ -178,9 +178,13 @@ class LinearizedMHD:
         m0 = fd.zeros()
         m_rho_rho = fd.zeros()
         m_Br_Br = fd.zeros()
+        m_Br_Btheta = fd.zeros()
         m_Btheta_rho = fd.zeros()
+        m_Btheta_Br = fd.zeros()
         m_Btheta_Btheta = fd.zeros()
+        m_Btheta_Bz = fd.zeros()
         m_Bz_Br = fd.zeros()
+        m_Bz_Btheta = fd.zeros()
         m_Bz_Bz = fd.zeros()
         m_Vr_Vr = fd.zeros()
         m_Vtheta_Vtheta = fd.zeros()
@@ -191,12 +195,15 @@ class LinearizedMHD:
         m_Btheta_Btheta = m_Btheta_Btheta + 1j * D_eta * ((1 / rr * fd.ddr(1) + fd.ddr(2)) - fd.diag(k**2 + 1 / rr**2))
         m_Bz_Bz = m_Bz_Bz + 1j * D_eta * ((1 / rr * fd.ddr(1) + fd.ddr(2)) - fd.diag(k**2)) 
         
-        # Hall term (Terms including B_Z0 have not been added yet)
+        # Hall term
         m_Br_Br = m_Br_Br + D_H * fd.diag(-k / (rr * rho) * (fd.ddr(1) @ (rr * B)))
-        m_Btheta_rho = m_Btheta_rho + D_H * fd.diag(k * B / (rr * rho**2) * (fd.ddr(1) @ (rr * B)))
+        m_Br_Btheta = m_Br_Btheta + D_H * fd.diag(-1j * B_Z0 * k**2 / rho)
+        m_Btheta_Br = m_Btheta_Br + D_H * fd.diag(1j * B_Z0 * k**2 / rho)
         m_Btheta_Btheta = m_Btheta_Btheta + D_H * fd.diag(-2 * k * B / (rr * rho) + (fd.ddr(1) @ (1 / rho)) * B * k)
-        m_Bz_Br = m_Bz_Br + D_H * (-1j / (rr * rho) * (fd.ddr(1) @ (rr * B)) * fd.ddr(1) + fd.diag(fd.ddr(2) @ (rr * B))
+        m_Btheta_Bz = m_Btheta_Bz + D_H * -B_Z0 * k / rho * fd.ddr(1)
+        m_Bz_Br = m_Bz_Br + D_H * (-1j / (rr * rho) * (fd.ddr(1) @ (rr * B)) * fd.ddr(1) - fd.diag(1j / (rr * rho) * fd.ddr(2) @ (rr * B))
                                    - fd.diag(1j * (fd.ddr(1) @ (1 / rho)) * 1 / rr * (fd.ddr(1) @ (rr * B))))    
+        m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) + fd.diag(fd.ddr(1) @ (1 / rho) * B_Z0 * k))
         
         # Electron pressure term (Terms including B_Z0 have not been added yet)
         m_Btheta_rho = m_Btheta_rho + D_P * fd.diag(k * (1 / rho**2 * (fd.ddr(1) @ rho) + (fd.ddr(1) @ (1 / rho))))
@@ -210,13 +217,13 @@ class LinearizedMHD:
         m_Vtheta_Vtheta = m_Vtheta_Vtheta + fd.lhs_bc('value')      + fd.rhs_bc('value')
         m_Vz_Vz         = m_Vz_Vz         + fd.lhs_bc('derivative') + fd.rhs_bc('derivative')
                       
-        M = np.block([[m_rho_rho, m0, m0, m0, m_rho_Vr, m0, m_rho_Vz], 
-				      [m0, m_Br_Br, m0, m0, m_Br_Vr, m0, m0], 
-				      [m_Btheta_rho, m0, m_Btheta_Btheta, m0, m_Btheta_Vr, m_Btheta_Vtheta, m_Btheta_Vz], 
-				      [m0, m_Bz_Br, m0, m_Bz_Bz, m_Bz_Vr, m0, m0],
-				      [m_Vr_rho, m_Vr_Br, m_Vr_Btheta, m_Vr_Bz, m_Vr_Vr, m0, m0],
-				      [m0, m0, m_Vtheta_Btheta, m0, m0, m_Vtheta_Vtheta, m0],
-				      [m_Vz_rho, m0, m_Vz_Btheta, m0, m0, m0, m_Vz_Vz]])
+        M = np.block([[m_rho_rho,    m0,          m0,              m0,          m_rho_Vr,    m0,              m_rho_Vz   ], 
+				      [m0,           m_Br_Br,     m_Br_Btheta,     m0,          m_Br_Vr,     m0,              m0         ], 
+				      [m_Btheta_rho, m_Btheta_Br, m_Btheta_Btheta, m_Btheta_Bz, m_Btheta_Vr, m_Btheta_Vtheta, m_Btheta_Vz], 
+				      [m0,           m_Bz_Br,     m_Bz_Btheta,     m_Bz_Bz,     m_Bz_Vr,     m0,              m0         ],
+				      [m_Vr_rho,     m_Vr_Br,     m_Vr_Btheta,     m_Vr_Bz,     m_Vr_Vr,     m0,              m0         ],
+				      [m0,           m0,          m_Vtheta_Btheta, m0,          m0,          m_Vtheta_Vtheta, m0         ],
+				      [m_Vz_rho,     m0,          m_Vz_Btheta,     m0,          m0,          m0,              m_Vz_Vz    ]])
         return M
 
     def construct_rhs(self):
@@ -364,7 +371,7 @@ class LinearizedMHD:
         d_vec = 10
         plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
                    V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], 
-                   pivot='mid', width=0.004, scale=3.5)
+                   pivot='mid', width=0.002, scale=5)
         plt.title('Flow velocity')
         plt.xlabel('r')
         plt.ylabel('z')
