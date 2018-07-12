@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.linalg import eig
 from scipy.sparse import dia_matrix
+from scipy.sparse.linalg import eigs
 import matplotlib.pyplot as plt
 
 
@@ -231,6 +232,9 @@ class LinearizedMHD:
 
     def solve(self):
         self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
+        
+    def solve_for_gamma(self):
+        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=3j, which='LI', return_eigenvectors=False).imag
 
     # ith mode by magnitude of imaginary part
     def plot_mode(self, i):
@@ -375,9 +379,3 @@ class LinearizedMHD:
         plt.xlabel('Re')
         plt.ylabel('Im')
         plt.show()
-
-    def fastest_mode(self):
-        if self.evals is None:
-            return None
-
-        return max(self.evals.imag)
