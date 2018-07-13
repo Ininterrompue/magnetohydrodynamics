@@ -2,12 +2,12 @@ from mhd4solver import MHDSystem, MHDEquilibrium, LinearizedMHD
 import numpy as np
 import matplotlib.pyplot as plt
 
-sys = MHDSystem(N_r=200, r_max=2*np.pi)
+sys = MHDSystem(N_r=100, r_max=2*np.pi, D_eta=1e-3, D_H=1e-3, D_P=0, B_Z0=0)
 pressure = np.exp(-sys.grid.rr**4) + 0.05
 equ = MHDEquilibrium(sys, pressure)
 
-lin = LinearizedMHD(equ, k=2, D_eta=1e-3, D_H=0.1, D_P=0, B_Z0=0)
-lin.solve()
+lin = LinearizedMHD(equ, k=1)
+lin.solve(num_modes=1)
 lin.plot_eigenvalues()
 lin.plot_mode(-1)
 

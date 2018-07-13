@@ -5,11 +5,16 @@ from scipy.sparse.linalg import eigs
 import matplotlib.pyplot as plt
 
 
-
 class MHDSystem:
-    def __init__(self, N_r=50, N_ghost=1, r_max=1):
+    def __init__(self, N_r=50, N_ghost=1, r_max=1, D_eta=1e-3, D_H=0, D_P=0, B_Z0=0):
         self.grid = Grid(N_r, N_ghost, r_max)
         self.fd = FDSystem(self.grid)
+
+        # set plasma related parameters
+        self.D_eta = D_eta
+        self.D_H = D_H
+        self.D_P = D_P
+        self.B_Z0 = B_Z0
 
     def solve_eos(self, pressure):
         rho = pressure / 2.0
@@ -131,28 +136,34 @@ class FDSystem:
 
 
 class LinearizedMHD:
-    def __init__(self, equilibrium, k=1, D_eta=0, D_H=0, D_P=0, B_Z0=0):
+    def __init__(self, equilibrium, k=1):
         self.equilibrium = equilibrium
         self.fd_operator = None
         self.fd_rhs = None
         self.evals = None
         self.evects = None
-        self.set_z_mode(k, D_eta, D_H, D_P, B_Z0)
+        self.set_z_mode(k)
         self.k = k
 
-    def set_z_mode(self, k, D_eta, D_H, D_P, B_Z0):
-        self.fd_operator = self.construct_operator(k, D_eta, D_H, D_P, B_Z0)
+    def set_z_mode(self, k):
+        self.fd_operator = self.construct_operator(k)
         self.fd_rhs = self.construct_rhs()
         self.evals = None
         self.evects = None
 
-    def construct_operator(self, k=1, D_eta=0, D_H=0, D_P=0, B_Z0=0):
+    def construct_operator(self, k=1):
         fd = self.equilibrium.sys.fd
         r = self.equilibrium.sys.grid.r
         rr = self.equilibrium.sys.grid.rr
         rho = self.equilibrium.rho
         B = self.equilibrium.B
-        
+
+        # get plasma parameters from the system
+        D_eta = self.equilibrium.sys.D_eta
+        D_H = self.equilibrium.sys.D_H
+        D_P = self.equilibrium.sys.D_P
+        B_Z0 = self.equilibrium.sys.B_Z0
+
         # Ideal MHD
         m_rho_Vr = -1j * fd.ddr_product(rr * rho) / rr
         m_rho_Vz = fd.diag(k * rho)
@@ -218,12 +229,12 @@ class LinearizedMHD:
         m_Vz_Vz         = m_Vz_Vz         + fd.lhs_bc('derivative') + fd.rhs_bc('derivative')
                       
         M = np.block([[m_rho_rho,    m0,          m0,              m0,          m_rho_Vr,    m0,              m_rho_Vz   ], 
-				      [m0,           m_Br_Br,     m_Br_Btheta,     m0,          m_Br_Vr,     m0,              m0         ], 
-				      [m_Btheta_rho, m_Btheta_Br, m_Btheta_Btheta, m_Btheta_Bz, m_Btheta_Vr, m_Btheta_Vtheta, m_Btheta_Vz], 
-				      [m0,           m_Bz_Br,     m_Bz_Btheta,     m_Bz_Bz,     m_Bz_Vr,     m0,              m0         ],
-				      [m_Vr_rho,     m_Vr_Br,     m_Vr_Btheta,     m_Vr_Bz,     m_Vr_Vr,     m0,              m0         ],
-				      [m0,           m0,          m_Vtheta_Btheta, m0,          m0,          m_Vtheta_Vtheta, m0         ],
-				      [m_Vz_rho,     m0,          m_Vz_Btheta,     m0,          m0,          m0,              m_Vz_Vz    ]])
+                      [m0,           m_Br_Br,     m_Br_Btheta,     m0,          m_Br_Vr,     m0,              m0         ],
+                      [m_Btheta_rho, m_Btheta_Br, m_Btheta_Btheta, m_Btheta_Bz, m_Btheta_Vr, m_Btheta_Vtheta, m_Btheta_Vz],
+                      [m0,           m_Bz_Br,     m_Bz_Btheta,     m_Bz_Bz,     m_Bz_Vr,     m0,              m0         ],
+                      [m_Vr_rho,     m_Vr_Br,     m_Vr_Btheta,     m_Vr_Bz,     m_Vr_Vr,     m0,              m0         ],
+                      [m0,           m0,          m_Vtheta_Btheta, m0,          m0,          m_Vtheta_Vtheta, m0         ],
+                      [m_Vz_rho,     m0,          m_Vz_Btheta,     m0,          m0,          m0,              m_Vz_Vz    ]])
         return M
 
     def construct_rhs(self):
@@ -237,8 +248,12 @@ class LinearizedMHD:
         G[-1, -1] = 0
         return G
 
-    def solve(self):
-        self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
+    def solve(self, num_modes=None):
+        if num_modes:
+            self.evals, self.evects = eigs(self.fd_operator, k=num_modes, M=self.fd_rhs,
+                                           sigma=3j, which='LI', return_eigenvectors=True)
+        else:
+            self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
         
     def solve_for_gamma(self):
         return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=3j, which='LI', return_eigenvectors=False).imag
