@@ -4,8 +4,23 @@ import matplotlib.pyplot as plt
 
 sys = MHDSystem(N_r=100, r_max=2*np.pi, D_eta=1e-3, D_H=1e-3, D_P=0, B_Z0=0)
 pressure = np.exp(-sys.grid.rr**4) + 0.05
+sys = MHDSystem(N_r=100, r_max=3, D_eta=1e-3, D_H=1e-3, D_P=0, B_Z0=0)
+#pressure = np.exp(-sys.grid.rr**15) + 0.05
+pressure = 0.5*(np.tanh( 10*(1-sys.grid.rr) )+1)
 equ = MHDEquilibrium(sys, pressure)
 
+plt.plot(sys.grid.rr, equ.p,
+         sys.grid.rr, equ.B)
+plt.show()
+
+test = 0 * sys.grid.rr
+dp = 0.5*10* np.tanh( 10*(1-sys.grid.rr) )**2 - 5
+for i in range(sys.grid.N):
+    test = test - sys.grid.rr[i]**2 * dp[i] * (sys.grid.rr > sys.grid.rr[i])/(sys.grid.rr**2)
+plt.plot(sys.grid.rr, equ.p,
+         sys.grid.rr, equ.B,
+         sys.grid.rr, np.sqrt(test) )
+plt.show()
 lin = LinearizedMHD(equ, k=1)
 lin.solve(num_modes=1)
 lin.plot_eigenvalues()
