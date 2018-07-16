@@ -1,4 +1,7 @@
 import numpy as np
+from scipy.special import erf
+from scipy.special import gamma
+from scipy.special import gammainc
 from scipy.linalg import eig
 from scipy.sparse import dia_matrix
 from scipy.sparse.linalg import eigs
@@ -6,7 +9,7 @@ import matplotlib.pyplot as plt
 
 
 class MHDSystem:
-    def __init__(self, N_r=50, N_ghost=1, r_max=1, D_eta=1e-3, D_H=0, D_P=0, B_Z0=0):
+    def __init__(self, N_r=50, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0):
         self.grid = Grid(N_r, N_ghost, r_max)
         self.fd = FDSystem(self.grid)
 
@@ -16,17 +19,13 @@ class MHDSystem:
         self.D_P = D_P
         self.B_Z0 = B_Z0
 
-    def solve_eos(self, pressure):
-        rho = pressure / 2.0
-        return rho
-
 
 class Grid:
     def __init__(self, N_r=50, N_ghost=1, r_max=1):
         # set up grid, with ghost cells
         N = 2 * N_ghost + N_r
         dr = r_max / N_r
-        r = np.linspace(-dr / 2, r_max + dr / 2, N)
+        r = np.linspace(-dr / 2 * (2 * N_ghost - 1), r_max + dr / 2 * (2 * N_ghost - 1), N)
         rr = np.reshape(r, (N, 1))
         self.r = r
         self.rr = rr
@@ -38,17 +37,21 @@ class Grid:
 
 
 class MHDEquilibrium:
-    def __init__(self, sys, p):
+    def __init__(self, sys, p_exp):
         # given a pressure, solve for magnetic field
         self.sys = sys
-        self.p = p
+        self.p_exp = p_exp
+        self.p = self.compute_p()
         self.rho = self.compute_rho_from_p()
         self.B = self.compute_b_from_p()
         self.J = self.compute_j_from_b()
 
+    def compute_p(self):
+        return 0.05 + np.exp(-self.sys.grid.rr**self.p_exp)
+        
     def compute_rho_from_p(self):
-        # use the EOS in the MHDSystem
-        rho = self.sys.solve_eos(self.p)
+        # Equation of state
+        rho = self.p / 2
         return rho
 
     def compute_b_from_p(self):
@@ -58,22 +61,39 @@ class MHDEquilibrium:
         rhs = -(self.sys.fd.ddr(1) @ self.p)
         
         # set boundary conditions
-        rhs[0] = 0
-        rhs[-1] = 0
+        if self.sys.grid.N_ghost == 1:
+            rhs[0] = 0
+            rhs[-1] = 0
+            lhs[0, 0] = 1
+            lhs[0, 1] = 1
+            lhs[-1, -1] = -self.sys.grid.r[-1] / self.sys.grid.r[-2]
+            lhs[-1, -2] = 1
+        elif self.sys.grid.N_ghost == 2:
+            rhs[0] = 0
+            rhs[1] = 0
+            rhs[-2] = 0
+            rhs[-1] = 0
+            lhs[1, 1] = 1
+            lhs[1, 2] = 1
+            lhs[0, 0] = 1
+            lhs[0, 2] = 3
+            lhs[-2, -1] = -self.sys.grid.r[-1] / self.sys.grid.r[-2]
+            lhs[-2, -2] = 1
+            lhs[-1, -2] = -self.sys.grid.r[-2] / self.sys.grid.r[-3]
+            lhs[-1, -3] = 1
 
-        lhs[0, 0] = 1
-        lhs[0, 1] = 1
-        lhs[-1, -1] = -self.sys.grid.r[-1] / self.sys.grid.r[-2]
-        lhs[-1, -2] = 1
-
-        b_squared = np.linalg.solve(lhs, rhs)
-        return np.sqrt(4 * np.pi) * np.sign(b_squared) * np.sqrt(np.abs(b_squared))
+        # b_squared = np.linalg.solve(lhs, rhs)
+        # b_squared = np.sqrt(np.pi) / self.sys.grid.rr**2 * erf(self.sys.grid.rr**2) - 2 * np.exp(-self.sys.grid.rr**4)
+        b_squared = (4 / (self.p_exp * self.sys.grid.rr**2) * gamma(2 / self.p_exp) * gammainc(2 / self.p_exp, self.sys.grid.rr**self.p_exp) 
+                    - 2 * np.exp(-self.sys.grid.rr**self.p_exp))
+        b = np.sqrt(4 * np.pi) * np.sign(b_squared) * np.sqrt(np.abs(b_squared))
+        # boundary condition to ensure no NaNs
+        b[0] = b[1]
+        return b 
 
     def compute_j_from_b(self):
-        dv = self.sys.fd.ddr_product(self.sys.grid.r)
-        # dv = self.sys.fd.ddr()
-        # J = (1 / self.sys.grid.r) * (dv @ (self.sys.grid.r * self.B) )
-        J = (1 / self.sys.grid.r) * (dv @ (self.B) )
+        dv = self.sys.fd.ddr_product(self.sys.grid.rr)
+        J = 1 / self.sys.grid.rr * (dv @ self.B)
         return J
 
 
@@ -85,17 +105,35 @@ class FDSystem:
 
     def ddr(self, order):
         one = np.ones(self.grid.N - 1)
-        if order == 1:
-            dv = (np.diag(one, 1) - np.diag(one, -1)) / (2 * self.grid.dr)
-        elif order == 2:
-            dv = (dia_matrix((one, 1), shape=(self.grid.N, self.grid.N)) 
-                  - 2 * dia_matrix((one, 0), shape=(self.grid.N, self.grid.N)) 
-                  + dia_matrix((one, -1), shape=(self.grid.N, self.grid.N))).toarray() / self.grid.dr**2    
+        if self.grid.N_ghost == 1:
+            if order == 1:
+                dv = (np.diag(one, 1) - np.diag(one, -1)) / (2 * self.grid.dr)
+            elif order == 2:
+                dv = (dia_matrix((one, 1), shape=(self.grid.N, self.grid.N)).toarray() 
+                      - 2 * np.identity(self.grid.N) + dia_matrix((one, -1), shape=(self.grid.N, self.grid.N)).toarray()) / self.grid.dr**2  
+                        
+        elif self.grid.N_ghost == 2:
+            if order == 1:
+                dv = (- 1/12 * dia_matrix((one, +2), shape=(self.grid.N, self.grid.N)) 
+                      + 2/3  * dia_matrix((one, +1), shape=(self.grid.N, self.grid.N)) 
+                      - 2/3  * dia_matrix((one, -1), shape=(self.grid.N, self.grid.N)) 
+                      + 1/12 * dia_matrix((one, -2), shape=(self.grid.N, self.grid.N))).toarray() / self.grid.dr
+            elif order == 2:
+                dv = (- 1/12 * dia_matrix((one, +2), shape=(self.grid.N, self.grid.N))
+                      + 4/3  * dia_matrix((one, +1), shape=(self.grid.N, self.grid.N))
+                      - 5/2  * dia_matrix((one, +0), shape=(self.grid.N, self.grid.N))
+                      + 4/3  * dia_matrix((one, -1), shape=(self.grid.N, self.grid.N))
+                      - 1/12 * dia_matrix((one, -2), shape=(self.grid.N, self.grid.N))).toarray() / self.grid.dr**2
+                      
         dv = self.zero_bc(dv)
         return dv
 
     def ddr_product(self, vec):
-        dv = (np.diagflat(vec[1: ], 1) - np.diagflat(vec[: -1], -1))/(2 * self.grid.dr)
+        if self.grid.N_ghost == 1:
+            dv = (np.diagflat(vec[1: ], 1) - np.diagflat(vec[: -1], -1)) / (2 * self.grid.dr)
+        elif self.grid.N_ghost == 2:
+            dv = (-1/12 * np.diagflat(vec[2: ], 2) + 2/3 * np.diagflat(vec[1: ], 1) 
+                  - 2/3 * np.diagflat(vec[: -1], -1) + 1/12 * np.diagflat(vec[: -2], -2)) / self.grid.dr
         dv = self.zero_bc(dv)
         return dv
 
@@ -114,6 +152,11 @@ class FDSystem:
         M = M_0.copy()
         M[0, :] = 0
         M[-1, :] = 0
+        
+        if self.grid.N_ghost == 2:
+            M[1, :] = 0
+            M[-2, :] = 0
+            
         return M
 
     def lhs_bc(self, bc_type='value'):
@@ -256,7 +299,7 @@ class LinearizedMHD:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
         
     def solve_for_gamma(self):
-        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=5j, which='LI', return_eigenvectors=False).imag
+        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=8j, which='LI', return_eigenvectors=False).imag
 
     # ith mode by magnitude of imaginary part
     def plot_mode(self, i):
