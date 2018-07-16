@@ -4,13 +4,14 @@ import matplotlib.pyplot as plt
 from scipy.special import erf
 
 sys = MHDSystem(N_r=400, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-equ = MHDEquilibrium(sys, p_exp=4)
+# equ = MHDEquilibrium(sys, p_exp=4)
+
 
 ## Exact solution comparison for p_exp = 4
-B_exact_2 = np.sqrt(np.pi) / sys.grid.rr**2 * erf(sys.grid.rr**2) - 2 * np.exp(-sys.grid.rr**4)
-B_exact = np.sqrt(4 * np.pi) * np.sign(B_exact_2) * np.sqrt(np.abs(B_exact_2))
-plt.plot(sys.grid.r, equ.p, sys.grid.r, equ.B, sys.grid.r, B_exact)
-plt.show()
+# B_exact_2 = np.sqrt(np.pi) / sys.grid.rr**2 * erf(sys.grid.rr**2) - 2 * np.exp(-sys.grid.rr**4)
+# B_exact = np.sqrt(4 * np.pi) * np.sign(B_exact_2) * np.sqrt(np.abs(B_exact_2))
+# plt.plot(sys.grid.r, equ.p, sys.grid.r, equ.B, sys.grid.r, B_exact)
+# plt.show()
 
 # lin = LinearizedMHD(equ, k=1)
 # lin.solve(num_modes=1)
@@ -42,27 +43,48 @@ plt.show()
 ########################
 
 # Asymptotic gamma routine
+# pexp_vals = range(1, 16, 1)
+# gammas = []
+# for pexp in pexp_vals:
+#     print(pexp)
+#     equ = MHDEquilibrium(sys, pexp)
+#     lin = LinearizedMHD(equ, k=50)
+#     lin.set_z_mode(k=50)
+#     gammas.append(lin.solve_for_gamma())
+# 
+# plt.plot(pexp_vals, gammas, '.-')
+# plt.title('Asymptotic growth rates')
+# plt.xlabel('Pressure exponent')
+# plt.ylabel('gamma')
+# plt.show()
+
+def find_nearest(array, value): return (np.abs(array - value)).argmin()
+
+# Asymptotic gamma routine
 pexp_vals = range(1, 16, 1)
 gammas = []
+l_char = []
 for pexp in pexp_vals:
     print(pexp)
     equ = MHDEquilibrium(sys, pexp)
-    lin = LinearizedMHD(equ, k=1)
-    lin.set_z_mode(k=1)
-    gammas.append(lin.solve_for_gamma(use_cached_sigma=False))
+    lin = LinearizedMHD(equ, k=50)
+    lin.set_z_mode(k=50)
+    gammas.append(lin.solve_for_gamma())
+    l_char.append((find_nearest(equ.p, 0.15) - find_nearest(equ.p, 0.95)) * sys.grid.dr)
 
-plt.plot(pexp_vals, gammas, '.-')
+plt.scatter(l_char, gammas, s=1)
 plt.title('Asymptotic growth rates')
-plt.xlabel('Pressure exponent')
+plt.xlabel('Characteristic gradient length')
 plt.ylabel('gamma')
 plt.show()
 
 
 ## gamma vs. k
 # Need to increase resolution to find gammas for very low k.
-# k_vals = np.reshape(np.linspace(0.01, 0.2, 10), (10, 1))
+# k_vals = np.reshape(np.linspace(0.2, 1, 10), (10, 1))
 # gammas_k = []
 # for k in k_vals:
+#     # print(k)
 #     lin.set_z_mode(k)
 #     gammas_k.append(lin.solve_for_gamma())
 # 
