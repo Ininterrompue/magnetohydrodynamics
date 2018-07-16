@@ -4,33 +4,57 @@ import matplotlib.pyplot as plt
 from scipy.special import erf
 
 sys = MHDSystem(N_r=400, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-# equ = MHDEquilibrium(sys, p_exp=4)
+equ = MHDEquilibrium(sys, p_exp=4)
 
-# B_exact_2 = np.sqrt(np.pi) / sys.grid.rr**2 * erf(sys.grid.rr**2) - 2 * np.exp(-sys.grid.rr**4)
-# B_exact = np.sqrt(4 * np.pi) * np.sign(B_exact_2) * np.sqrt(np.abs(B_exact_2))
-# plt.plot(sys.grid.r, equ.p, sys.grid.r, equ.B)
-# plt.show()
+## Exact solution comparison for p_exp = 4
+B_exact_2 = np.sqrt(np.pi) / sys.grid.rr**2 * erf(sys.grid.rr**2) - 2 * np.exp(-sys.grid.rr**4)
+B_exact = np.sqrt(4 * np.pi) * np.sign(B_exact_2) * np.sqrt(np.abs(B_exact_2))
+plt.plot(sys.grid.r, equ.p, sys.grid.r, equ.B, sys.grid.r, B_exact)
+plt.show()
 
 # lin = LinearizedMHD(equ, k=1)
 # lin.solve(num_modes=1)
 # # lin.plot_eigenvalues()
 # lin.plot_mode(-1)
 
+########################
+# sys = MHDSystem(N_r=100, r_max=2*np.pi, D_eta=1e-3, D_H=1e-3, D_P=0, B_Z0=0)
+# pressure = np.exp(-sys.grid.rr**4) + 0.05
+# sys = MHDSystem(N_r=100, r_max=3, D_eta=1e-3, D_H=1e-3, D_P=0, B_Z0=0)
+# #pressure = np.exp(-sys.grid.rr**15) + 0.05
+# pressure = 0.5*(np.tanh( 10*(1-sys.grid.rr) )+1)
+# equ = MHDEquilibrium(sys, pressure)
+# 
+# plt.plot(sys.grid.rr, equ.p,
+#          sys.grid.rr, equ.B)
+# plt.show()
+# 
+# test = 0 * sys.grid.rr
+# dp = 0.5*10* np.tanh( 10*(1-sys.grid.rr) )**2 - 5
+# for i in range(sys.grid.N):
+#     test = test - sys.grid.rr[i]**2 * dp[i] * (sys.grid.rr > sys.grid.rr[i])/(sys.grid.rr**2)
+# plt.plot(sys.grid.rr, equ.p,
+#          sys.grid.rr, equ.B,
+#          sys.grid.rr, np.sqrt(test) )
+# plt.show()
+# 
+# lin = LinearizedMHD(equ, k=1)
+########################
 
 # Asymptotic gamma routine
-pexp_vals = range(1, 16, 1)
-gammas = []
-for pexp in pexp_vals:
-    equ = MHDEquilibrium(sys, pexp)
-    lin = LinearizedMHD(equ, k=50)
-    lin.set_z_mode(k=50)
-    gammas.append(lin.solve_for_gamma())
-    
-plt.plot(pexp_vals, gammas)
-plt.title('Asymptotic growth rates')
-plt.xlabel('Pressure exponent')
-plt.ylabel('gamma')
-plt.show()
+# pexp_vals = range(1, 16, 1)
+# gammas = []
+# for pexp in pexp_vals:
+#     equ = MHDEquilibrium(sys, pexp)
+#     lin = LinearizedMHD(equ, k=50)
+#     lin.set_z_mode(k=50)
+#     gammas.append(lin.solve_for_gamma())
+#     
+# plt.plot(pexp_vals, gammas)
+# plt.title('Asymptotic growth rates')
+# plt.xlabel('Pressure exponent')
+# plt.ylabel('gamma')
+# plt.show()
 
 
 ## gamma vs. k
