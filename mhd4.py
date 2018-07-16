@@ -42,19 +42,20 @@ plt.show()
 ########################
 
 # Asymptotic gamma routine
-# pexp_vals = range(1, 16, 1)
-# gammas = []
-# for pexp in pexp_vals:
-#     equ = MHDEquilibrium(sys, pexp)
-#     lin = LinearizedMHD(equ, k=50)
-#     lin.set_z_mode(k=50)
-#     gammas.append(lin.solve_for_gamma())
-#     
-# plt.plot(pexp_vals, gammas)
-# plt.title('Asymptotic growth rates')
-# plt.xlabel('Pressure exponent')
-# plt.ylabel('gamma')
-# plt.show()
+pexp_vals = range(1, 16, 1)
+gammas = []
+for pexp in pexp_vals:
+    print(pexp)
+    equ = MHDEquilibrium(sys, pexp)
+    lin = LinearizedMHD(equ, k=1)
+    lin.set_z_mode(k=1)
+    gammas.append(lin.solve_for_gamma(use_cached_sigma=False))
+
+plt.plot(pexp_vals, gammas, '.-')
+plt.title('Asymptotic growth rates')
+plt.xlabel('Pressure exponent')
+plt.ylabel('gamma')
+plt.show()
 
 
 ## gamma vs. k

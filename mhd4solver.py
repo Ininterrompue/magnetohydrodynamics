@@ -187,6 +187,7 @@ class LinearizedMHD:
         self.evects = None
         self.set_z_mode(k)
         self.k = k
+        self._sigma = None
 
     def set_z_mode(self, k):
         self.fd_operator = self.construct_operator(k)
@@ -298,8 +299,15 @@ class LinearizedMHD:
         else:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
         
-    def solve_for_gamma(self):
-        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=8j, which='LI', return_eigenvectors=False).imag
+    def solve_for_gamma(self, use_cached_sigma=False):
+        if use_cached_sigma and self._sigma:
+            e = eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=self._sigma,
+                        which='LI', return_eigenvectors=False).imag
+            self._sigma = e
+            return e
+        else:
+            return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=1j,
+                        which='LI', return_eigenvectors=False).imag
 
     # ith mode by magnitude of imaginary part
     def plot_mode(self, i):
