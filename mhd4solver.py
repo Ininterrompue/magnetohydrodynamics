@@ -256,7 +256,7 @@ class LinearizedMHD:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
         
     def solve_for_gamma(self):
-        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=3j, which='LI', return_eigenvectors=False).imag
+        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=5j, which='LI', return_eigenvectors=False).imag
 
     # ith mode by magnitude of imaginary part
     def plot_mode(self, i):
