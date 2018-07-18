@@ -215,7 +215,7 @@ class LinearizedMHD:
         m_Br_Vr = -B_Z0 * k * fd.diag_I()
 
         m_Btheta_Vr = -1j * fd.ddr_product(B)
-        m_Btheta_Vtheta = B_Z0 * k * fd.diag_I()
+        m_Btheta_Vtheta = -B_Z0 * k * fd.diag_I()
         m_Btheta_Vz = fd.diag(k * B)
         
         m_Bz_Vr = -1j * B_Z0 / rr * fd.ddr_product(rr)
@@ -225,6 +225,7 @@ class LinearizedMHD:
         m_Vr_Btheta = -1j * fd.ddr_product(rr**2 * B) / (4 * np.pi * rho * rr**2)
         m_Vr_Bz = -1j * B_Z0 / (4 * np.pi * rho) * fd.ddr(1)
         
+        m_Vtheta_Br = fd.diag(1j * (fd.ddr(1) @ (rr * B)) / (4 * np.pi * rho * rr))
         m_Vtheta_Btheta = fd.diag(-B_Z0 * k / (4 * np.pi * rho))
         
         m_Vz_rho = fd.diag(2.0 * k / rho)
@@ -270,14 +271,14 @@ class LinearizedMHD:
         m_Bz_Bz         = m_Bz_Bz         + fd.lhs_bc('derivative') + fd.rhs_bc('derivative')
         m_Vr_Vr         = m_Vr_Vr         + fd.lhs_bc('value')      + fd.rhs_bc('derivative')
         m_Vtheta_Vtheta = m_Vtheta_Vtheta + fd.lhs_bc('value')      + fd.rhs_bc('value')
-        m_Vz_Vz         = m_Vz_Vz         + fd.lhs_bc('derivative') + fd.rhs_bc('derivative')
+        m_Vz_Vz         = m_Vz_Vz         + fd.lhs_bc('derivative') + fd.rhs_bc('value')
                       
         M = np.block([[m_rho_rho,    m0,          m0,              m0,          m_rho_Vr,    m0,              m_rho_Vz   ], 
                       [m0,           m_Br_Br,     m_Br_Btheta,     m0,          m_Br_Vr,     m0,              m0         ],
                       [m_Btheta_rho, m_Btheta_Br, m_Btheta_Btheta, m_Btheta_Bz, m_Btheta_Vr, m_Btheta_Vtheta, m_Btheta_Vz],
                       [m0,           m_Bz_Br,     m_Bz_Btheta,     m_Bz_Bz,     m_Bz_Vr,     m0,              m0         ],
                       [m_Vr_rho,     m_Vr_Br,     m_Vr_Btheta,     m_Vr_Bz,     m_Vr_Vr,     m0,              m0         ],
-                      [m0,           m0,          m_Vtheta_Btheta, m0,          m0,          m_Vtheta_Vtheta, m0         ],
+                      [m0,           m_Vtheta_Br, m_Vtheta_Btheta, m0,          m0,          m_Vtheta_Vtheta, m0         ],
                       [m_Vz_rho,     m0,          m_Vz_Btheta,     m0,          m0,          m0,              m_Vz_Vz    ]])
         return M
 
@@ -295,7 +296,7 @@ class LinearizedMHD:
     def solve(self, num_modes=None):
         if num_modes:
             self.evals, self.evects = eigs(self.fd_operator, k=num_modes, M=self.fd_rhs,
-                                           sigma=3j, which='LI', return_eigenvectors=True)
+                                           sigma=1.5j, which='LI', return_eigenvectors=True)
         else:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
         
@@ -313,7 +314,7 @@ class LinearizedMHD:
 #             return self._sigma
 
     def solve_for_gamma(self):
-        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=8j, which='LI', return_eigenvectors=False).imag
+        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=3.2j, which='LI', return_eigenvectors=False).imag
 
     # ith mode by magnitude of imaginary part
     def plot_mode(self, i):
@@ -345,8 +346,8 @@ class LinearizedMHD:
         f = plt.figure()
         f.suptitle(omega.imag)
 
-        # def f1(x): return np.abs(x)
-        # def f2(x): return np.unwrap(np.angle(x)) / (2*3.14159)
+#         def f1(x): return np.abs(x)
+#         def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
         def f1(x): return np.real(x)
         def f2(x): return np.imag(x)
 
