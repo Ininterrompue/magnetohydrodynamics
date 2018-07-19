@@ -254,12 +254,13 @@ class LinearizedMHD:
         # Hall term
         m_Br_Br = m_Br_Br + D_H * fd.diag(-k / (rr * rho) * (fd.ddr(1) @ (rr * B)))
         m_Br_Btheta = m_Br_Btheta + D_H * fd.diag(-1j * B_Z0 * k**2 / rho)
+        m_Btheta_rho = m_Btheta_rho + D_H * fd.diag(k * B / (rho**2 * rr) * (fd.ddr(1) @ (rr * B)))
         m_Btheta_Br = m_Btheta_Br + D_H * fd.diag(1j * B_Z0 * k**2 / rho)
-        m_Btheta_Btheta = m_Btheta_Btheta + D_H * fd.diag(-2 * k * B / (rr * rho) + (fd.ddr(1) @ (1 / rho)) * B * k)
-        m_Btheta_Bz = m_Btheta_Bz + D_H * -B_Z0 * k / rho * fd.ddr(1)
-        m_Bz_Br = m_Bz_Br + D_H * (-1j / (rr * rho) * (fd.ddr(1) @ (rr * B)) * fd.ddr(1) - fd.diag(1j / (rr * rho) * fd.ddr(2) @ (rr * B))
-                                   - fd.diag(1j * (fd.ddr(1) @ (1 / rho)) * 1 / rr * (fd.ddr(1) @ (rr * B))))    
-        m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) + fd.diag(fd.ddr(1) @ (1 / rho) * B_Z0 * k))
+        m_Btheta_Btheta = m_Btheta_Btheta + D_H * fd.diag(k * B * (fd.ddr(1) @ (1 / rho)) - 2 * B * k / (rr * rho))
+        m_Btheta_Bz = m_Btheta_Bz + D_H * ((-B_Z0 * k / rho) * fd.ddr(1))
+        m_Bz_Br = m_Bz_Br + D_H * (-1j / (rr * rho) * (fd.ddr(1) @ (rr * B)) * fd.ddr(1) - fd.diag(1j / (rr * rho) * (fd.ddr(2) @ (rr * B)))
+                                   - fd.diag(1j / rr * (fd.ddr(1) @ (1 / rho)) * (fd.ddr(1) @ (rr * B))))    
+        m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) + fd.diag(B_Z0 * k * (fd.ddr(1) @ (1 / rho))))
         
         # Electron pressure term (Terms including B_Z0 have not been added yet)
         m_Btheta_rho = m_Btheta_rho + D_P * fd.diag(k * (1 / rho**2 * (fd.ddr(1) @ rho) + (fd.ddr(1) @ (1 / rho))))
@@ -296,7 +297,7 @@ class LinearizedMHD:
     def solve(self, num_modes=None):
         if num_modes:
             self.evals, self.evects = eigs(self.fd_operator, k=num_modes, M=self.fd_rhs,
-                                           sigma=1.5j, which='LI', return_eigenvectors=True)
+                                           sigma=5j, which='LI', return_eigenvectors=True)
         else:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
         
@@ -314,7 +315,7 @@ class LinearizedMHD:
 #             return self._sigma
 
     def solve_for_gamma(self):
-        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=3.2j, which='LI', return_eigenvectors=False).imag
+        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=5j, which='LI', return_eigenvectors=False).imag
 
     # ith mode by magnitude of imaginary part
     def plot_mode(self, i):
