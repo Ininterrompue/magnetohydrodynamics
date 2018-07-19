@@ -262,8 +262,8 @@ class LinearizedMHD:
                                    - fd.diag(1j / rr * (fd.ddr(1) @ (1 / rho)) * (fd.ddr(1) @ (rr * B))))    
         m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) + fd.diag(B_Z0 * k * (fd.ddr(1) @ (1 / rho))))
         
-        # Electron pressure term (Terms including B_Z0 have not been added yet)
-        m_Btheta_rho = m_Btheta_rho + D_P * fd.diag(k * (1 / rho**2 * (fd.ddr(1) @ rho) + (fd.ddr(1) @ (1 / rho))))
+        # Electron pressure term
+        m_Btheta_rho = m_Btheta_rho + D_P * fd.diag(2 * k / rho**2 * (fd.ddr(1) @ rho) + 2 * k * (fd.ddr(1) @ (1 / rho)))
         
         # Boundary conditions
         m_rho_rho       = m_rho_rho       + fd.lhs_bc('derivative') + fd.rhs_bc('value')
