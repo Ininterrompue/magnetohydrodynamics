@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import erf
 
-sys = MHDSystem(N_r=400, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=100, B_Z0=0)
+sys = MHDSystem(N_r=400, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0.1, D_P=0, B_Z0=0)
 equ = MHDEquilibrium(sys, p_exp=4)
 lin = LinearizedMHD(equ, k=1)
 
@@ -85,18 +85,10 @@ def find_nearest(array, value): return (np.abs(array - value)).argmin()
 
 ## gamma vs. k
 ## Need to increase resolution to find gammas for very low k.
-# k_vals = np.reshape(np.linspace(0.01, 10, 30), (30, 1))
+# k_vals = np.reshape(np.linspace(0.01, 6, 30), (30, 1))
 # gammas_k0 = []
 # gammas_k05 = []
 # gammas_k1 = []
-# 
-# sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-# equ = MHDEquilibrium(sys, p_exp=4)
-# lin = LinearizedMHD(equ, k=1)
-# for k in k_vals:
-#     print(k)
-#     lin.set_z_mode(k)
-#     gammas_k0.append(lin.solve_for_gamma())
 # 
 # sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0.5)
 # equ = MHDEquilibrium(sys, p_exp=4)
@@ -104,9 +96,17 @@ def find_nearest(array, value): return (np.abs(array - value)).argmin()
 # for k in k_vals:
 #     print(k)
 #     lin.set_z_mode(k)
+#     gammas_k0.append(lin.solve_for_gamma())
+# 
+# sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=0.5, D_H=0, D_P=0, B_Z0=0.5)
+# equ = MHDEquilibrium(sys, p_exp=4)
+# lin = LinearizedMHD(equ, k=1)
+# for k in k_vals:
+#     print(k)
+#     lin.set_z_mode(k)
 #     gammas_k05.append(lin.solve_for_gamma())
 #     
-# sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=1)
+# sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=1, D_H=0, D_P=0, B_Z0=0.5)
 # equ = MHDEquilibrium(sys, p_exp=4)
 # lin = LinearizedMHD(equ, k=1)
 # for k in k_vals:
@@ -118,7 +118,7 @@ def find_nearest(array, value): return (np.abs(array - value)).argmin()
 # plt.title('Fastest growing mode')
 # plt.xlabel('k')
 # plt.ylabel('gamma')
-# plt.legend(['B_Z0 = 0', 'B_Z0 = 0.5', 'B_Z0 = 1'])
+# plt.legend(['D_eta = 0', 'D_eta = 0.5', 'D_eta = 1'])
 # plt.show()
 
 

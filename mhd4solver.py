@@ -252,18 +252,32 @@ class LinearizedMHD:
         m_Bz_Bz = m_Bz_Bz + 1j * D_eta * ((1 / rr * fd.ddr(1) + fd.ddr(2)) - fd.diag(k**2)) 
         
         # Hall term
+#         m_Br_Br = m_Br_Br + D_H * fd.diag(-k / (rr * rho) * (fd.ddr(1) @ (rr * B)))
+#         m_Br_Btheta = m_Br_Btheta + D_H * fd.diag(-1j * B_Z0 * k**2 / rho)
+#         m_Btheta_rho = m_Btheta_rho + D_H * fd.diag(k * B / (rho**2 * rr) * (fd.ddr(1) @ (rr * B)))
+#         m_Btheta_Br = m_Btheta_Br + D_H * fd.diag(1j * B_Z0 * k**2 / rho)
+#         m_Btheta_Btheta = m_Btheta_Btheta + D_H * fd.diag(k * B * (fd.ddr(1) @ (1 / rho)) - 2 * B * k / (rr * rho))
+#         m_Btheta_Bz = m_Btheta_Bz + D_H * ((-B_Z0 * k / rho) * fd.ddr(1))
+#         m_Bz_Br = m_Bz_Br + D_H * (-1j / (rr * rho) * (fd.ddr(1) @ (rr * B)) * fd.ddr(1) - fd.diag(1j / (rr * rho) * (fd.ddr(2) @ (rr * B)))
+#                                    - fd.diag(1j / rr * (fd.ddr(1) @ (1 / rho)) * (fd.ddr(1) @ (rr * B))))    
+#         m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) + fd.diag(B_Z0 * k * (fd.ddr(1) @ (1 / rho))))
+
         m_Br_Br = m_Br_Br + D_H * fd.diag(-k / (rr * rho) * (fd.ddr(1) @ (rr * B)))
         m_Br_Btheta = m_Br_Btheta + D_H * fd.diag(-1j * B_Z0 * k**2 / rho)
-        m_Btheta_rho = m_Btheta_rho + D_H * fd.diag(k * B / (rho**2 * rr) * (fd.ddr(1) @ (rr * B)))
-        m_Btheta_Br = m_Btheta_Br + D_H * fd.diag(1j * B_Z0 * k**2 / rho)
-        m_Btheta_Btheta = m_Btheta_Btheta + D_H * fd.diag(k * B * (fd.ddr(1) @ (1 / rho)) - 2 * B * k / (rr * rho))
-        m_Btheta_Bz = m_Btheta_Bz + D_H * ((-B_Z0 * k / rho) * fd.ddr(1))
-        m_Bz_Br = m_Bz_Br + D_H * (-1j / (rr * rho) * (fd.ddr(1) @ (rr * B)) * fd.ddr(1) - fd.diag(1j / (rr * rho) * (fd.ddr(2) @ (rr * B)))
-                                   - fd.diag(1j / rr * (fd.ddr(1) @ (1 / rho)) * (fd.ddr(1) @ (rr * B))))    
-        m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) + fd.diag(B_Z0 * k * (fd.ddr(1) @ (1 / rho))))
         
-        # Electron pressure term
-        m_Btheta_rho = m_Btheta_rho + D_P * fd.diag(2 * k / rho**2 * (fd.ddr(1) @ rho) + 2 * k * (fd.ddr(1) @ (1 / rho)))
+        m_Btheta_rho = m_Btheta_rho + D_H * fd.diag(-8 * np.pi * k / rho**2 * (fd.ddr(1) @ rho))
+        m_Btheta_Br = m_Btheta_Br + D_H * fd.diag(1j * B_Z0 * k**2 / rho)
+        m_Btheta_Btheta = m_Btheta_Btheta + D_H * fd.diag(-k * B / rho**2 * (fd.ddr(1) @ rho) - k * B / (rho * rr) + k / rho * (fd.ddr(1) @ B)
+                                                          - k / (rho * rr) * (fd.ddr(1) @ (rr * B)))
+        
+        
+        
+        m_Btheta_Bz = m_Btheta_Bz + D_H * ((-B_Z0 * k / rho) * fd.ddr(1))
+        m_Bz_Br = m_Bz_Br + D_H * fd.diag(1j / (rho**2 * rr) * (fd.ddr(1) @ rho) * (fd.ddr(1) @ (rr * B)))  
+        m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) + fd.diag(1j / (rho**2 * rr) * (fd.ddr(1) @ rho) * (fd.ddr(1) @ (rr * B))))
+        
+        # Electron pressure term is 0 for our current equation of state
+        # m_Btheta_rho = m_Btheta_rho + D_P * fd.diag(2 * k / rho**2 * (fd.ddr(1) @ rho) + 2 * k * (fd.ddr(1) @ (1 / rho)))
         
         # Boundary conditions
         m_rho_rho       = m_rho_rho       + fd.lhs_bc('derivative') + fd.rhs_bc('value')
@@ -315,7 +329,7 @@ class LinearizedMHD:
 #             return self._sigma
 
     def solve_for_gamma(self):
-        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=5j, which='LI', return_eigenvectors=False).imag
+        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=2.1j, which='LI', return_eigenvectors=False).imag
 
     # ith mode by magnitude of imaginary part
     def plot_mode(self, i):
@@ -445,7 +459,7 @@ class LinearizedMHD:
         d_vec = 10
         plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
                    V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], 
-                   pivot='mid', width=0.002, scale=5)
+                   pivot='mid', width=0.002, scale=4)
         plt.title('Flow velocity')
         plt.xlabel('r')
         plt.ylabel('z')
