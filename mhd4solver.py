@@ -252,29 +252,17 @@ class LinearizedMHD:
         m_Bz_Bz = m_Bz_Bz + 1j * D_eta * ((1 / rr * fd.ddr(1) + fd.ddr(2)) - fd.diag(k**2)) 
         
         # Hall term
-#         m_Br_Br = m_Br_Br + D_H * fd.diag(-k / (rr * rho) * (fd.ddr(1) @ (rr * B)))
-#         m_Br_Btheta = m_Br_Btheta + D_H * fd.diag(-1j * B_Z0 * k**2 / rho)
-#         m_Btheta_rho = m_Btheta_rho + D_H * fd.diag(k * B / (rho**2 * rr) * (fd.ddr(1) @ (rr * B)))
-#         m_Btheta_Br = m_Btheta_Br + D_H * fd.diag(1j * B_Z0 * k**2 / rho)
-#         m_Btheta_Btheta = m_Btheta_Btheta + D_H * fd.diag(k * B * (fd.ddr(1) @ (1 / rho)) - 2 * B * k / (rr * rho))
-#         m_Btheta_Bz = m_Btheta_Bz + D_H * ((-B_Z0 * k / rho) * fd.ddr(1))
-#         m_Bz_Br = m_Bz_Br + D_H * (-1j / (rr * rho) * (fd.ddr(1) @ (rr * B)) * fd.ddr(1) - fd.diag(1j / (rr * rho) * (fd.ddr(2) @ (rr * B)))
-#                                    - fd.diag(1j / rr * (fd.ddr(1) @ (1 / rho)) * (fd.ddr(1) @ (rr * B))))    
-#         m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) + fd.diag(B_Z0 * k * (fd.ddr(1) @ (1 / rho))))
-
         m_Br_Br = m_Br_Br + D_H * fd.diag(-k / (rr * rho) * (fd.ddr(1) @ (rr * B)))
-        m_Br_Btheta = m_Br_Btheta + D_H * fd.diag(-1j * B_Z0 * k**2 / rho)
-        
+        m_Br_Btheta = m_Br_Btheta + D_H * fd.diag(-1j * B_Z0 * k**2 / rho)    
         m_Btheta_rho = m_Btheta_rho + D_H * fd.diag(-8 * np.pi * k / rho**2 * (fd.ddr(1) @ rho))
         m_Btheta_Br = m_Btheta_Br + D_H * fd.diag(1j * B_Z0 * k**2 / rho)
-        m_Btheta_Btheta = m_Btheta_Btheta + D_H * fd.diag(-k * B / rho**2 * (fd.ddr(1) @ rho) - k * B / (rho * rr) + k / rho * (fd.ddr(1) @ B)
-                                                          - k / (rho * rr) * (fd.ddr(1) @ (rr * B)))
-        
-        
-        
+        m_Btheta_Btheta = m_Btheta_Btheta + D_H * fd.diag(-k * B / rho**2 * (fd.ddr(1) @ rho) - 2 * k * B / (rho * rr))
         m_Btheta_Bz = m_Btheta_Bz + D_H * ((-B_Z0 * k / rho) * fd.ddr(1))
-        m_Bz_Br = m_Bz_Br + D_H * fd.diag(1j / (rho**2 * rr) * (fd.ddr(1) @ rho) * (fd.ddr(1) @ (rr * B)))  
-        m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) + fd.diag(1j / (rho**2 * rr) * (fd.ddr(1) @ rho) * (fd.ddr(1) @ (rr * B))))
+        
+        m_Bz_Br = m_Bz_Br + D_H * (fd.diag(1j / (rho**2 * rr) * (fd.ddr(1) @ rho) * (fd.ddr(1) @ (rr * B)) - 1j / (rho * rr) * (fd.ddr(2) @ (rr * B)))
+                                   - 1j / (rho * rr) * (fd.ddr(1) @ (rr * B)) * fd.ddr(1))
+#         m_Bz_Br = m_Bz_Br + D_H * (fd.diag(1j / (rho**2 * rr) * (fd.ddr(1) @ rho) * (fd.ddr(1) @ (rr * B))) - 1j / (rho * rr) * (fd.ddr_product(fd.ddr(1) @ (rr * B))))
+        m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) - fd.diag(k * B_Z0 / rho**2 * (fd.ddr(1) @ rho)))
         
         # Electron pressure term is 0 for our current equation of state
         # m_Btheta_rho = m_Btheta_rho + D_P * fd.diag(2 * k / rho**2 * (fd.ddr(1) @ rho) + 2 * k * (fd.ddr(1) @ (1 / rho)))
@@ -311,7 +299,7 @@ class LinearizedMHD:
     def solve(self, num_modes=None):
         if num_modes:
             self.evals, self.evects = eigs(self.fd_operator, k=num_modes, M=self.fd_rhs,
-                                           sigma=5j, which='LI', return_eigenvectors=True)
+                                           sigma=2j, which='LI', return_eigenvectors=True)
         else:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
         
@@ -361,10 +349,10 @@ class LinearizedMHD:
         f = plt.figure()
         f.suptitle(omega.imag)
 
-#         def f1(x): return np.abs(x)
-#         def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
-        def f1(x): return np.real(x)
-        def f2(x): return np.imag(x)
+        def f1(x): return np.abs(x)
+        def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
+#         def f1(x): return np.real(x)
+#         def f2(x): return np.imag(x)
 
         ax = plt.subplot(3,3,1)
         ax.set_title('B_r')
@@ -456,7 +444,7 @@ class LinearizedMHD:
     
         # 2D quiver plot of V
         R, Z = np.meshgrid(r[1: -1], z[1: -1])
-        d_vec = 10
+        d_vec = 20
         plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
                    V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], 
                    pivot='mid', width=0.002, scale=4)

@@ -8,7 +8,7 @@ equ = MHDEquilibrium(sys, p_exp=4)
 lin = LinearizedMHD(equ, k=1)
 
 lin.solve(num_modes=1)
-# lin.plot_eigenvalues()
+lin.plot_eigenvalues()
 lin.plot_mode(-1)
 
 ## Exact solution comparison for p_exp = 4
