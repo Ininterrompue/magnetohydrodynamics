@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 
 class MHDSystem:
-    def __init__(self, N_r=50, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0):
+    def __init__(self, N_r=50, N_ghost=1, r_max=2*np.pi, m=0, D_eta=0, D_H=0, D_P=0, B_Z0=0):
         self.grid = Grid(N_r, N_ghost, r_max)
         self.fd = FDSystem(self.grid)
 
@@ -179,23 +179,24 @@ class FDSystem:
 
 
 class LinearizedMHD:
-    def __init__(self, equilibrium, k=1):
+    def __init__(self, equilibrium, k=1, m=0):
         self.equilibrium = equilibrium
         self.fd_operator = None
         self.fd_rhs = None
         self.evals = None
         self.evects = None
-        self.set_z_mode(k)
+        self.set_z_mode(k, m)
         self.k = k
+        self.m = m
         self._sigma = None
 
-    def set_z_mode(self, k):
-        self.fd_operator = self.construct_operator(k)
+    def set_z_mode(self, k, m):
+        self.fd_operator = self.construct_operator(k, m)
         self.fd_rhs = self.construct_rhs()
         self.evals = None
         self.evects = None
 
-    def construct_operator(self, k=1):
+    def construct_operator(self, k=1, m=0):
         fd = self.equilibrium.sys.fd
         r = self.equilibrium.sys.grid.r
         rr = self.equilibrium.sys.grid.rr
@@ -210,26 +211,32 @@ class LinearizedMHD:
 
         # Ideal MHD
         m_rho_Vr = -1j * fd.ddr_product(rr * rho) / rr
+        m_rho_Vtheta = fd.diag(2 * np.pi * m * rho / rr)
         m_rho_Vz = fd.diag(k * rho)
         
-        m_Br_Vr = -B_Z0 * k * fd.diag_I()
+        m_Br_Vr = -B_Z0 * k * fd.diag_I() - fd.diag(2 * np.pi * m * B / rr)
 
         m_Btheta_Vr = -1j * fd.ddr_product(B)
         m_Btheta_Vtheta = -B_Z0 * k * fd.diag_I()
         m_Btheta_Vz = fd.diag(k * B)
         
         m_Bz_Vr = -1j * B_Z0 / rr * fd.ddr_product(rr)
+        m_Bz_Vtheta = fd.diag(2 * np.pi * m * B_Z0 / rr)
+        m_Bz_Vz = fd.diag(-2 * np.pi * m * B / rr)
         
         m_Vr_rho = -2j * fd.ddr(1) / rho
-        m_Vr_Br = fd.diag(-B_Z0 * k / (4 * np.pi * rho))
+        m_Vr_Br = fd.diag(-B_Z0 * k / (4 * np.pi * rho) - m * B / (2 * rho * rr))
         m_Vr_Btheta = -1j * fd.ddr_product(rr**2 * B) / (4 * np.pi * rho * rr**2)
         m_Vr_Bz = -1j * B_Z0 / (4 * np.pi * rho) * fd.ddr(1)
         
+        m_Vtheta_rho = fd.diag(4 * np.pi * m / (rho * rr))
         m_Vtheta_Br = fd.diag(1j * (fd.ddr(1) @ (rr * B)) / (4 * np.pi * rho * rr))
         m_Vtheta_Btheta = fd.diag(-B_Z0 * k / (4 * np.pi * rho))
+        m_Vtheta_Bz = fd.diag(m * B_Z0 / (2 * rho * rr))
         
         m_Vz_rho = fd.diag(2.0 * k / rho)
-        m_Vz_Btheta = fd.diag(k * B / (4.0 * np.pi * rho))
+        m_Vz_Btheta = fd.diag(k * B / (4 * np.pi * rho))
+        m_Vz_Bz = fd.diag(-m * B / (2 * rho * rr))
        
         m0 = fd.zeros()
         m_rho_rho = fd.zeros()
@@ -276,13 +283,13 @@ class LinearizedMHD:
         m_Vtheta_Vtheta = m_Vtheta_Vtheta + fd.lhs_bc('value')      + fd.rhs_bc('value')
         m_Vz_Vz         = m_Vz_Vz         + fd.lhs_bc('derivative') + fd.rhs_bc('value')
                       
-        M = np.block([[m_rho_rho,    m0,          m0,              m0,          m_rho_Vr,    m0,              m_rho_Vz   ], 
+        M = np.block([[m_rho_rho,    m0,          m0,              m0,          m_rho_Vr,    m_rho_Vtheta,    m_rho_Vz   ], 
                       [m0,           m_Br_Br,     m_Br_Btheta,     m0,          m_Br_Vr,     m0,              m0         ],
                       [m_Btheta_rho, m_Btheta_Br, m_Btheta_Btheta, m_Btheta_Bz, m_Btheta_Vr, m_Btheta_Vtheta, m_Btheta_Vz],
-                      [m0,           m_Bz_Br,     m_Bz_Btheta,     m_Bz_Bz,     m_Bz_Vr,     m0,              m0         ],
+                      [m0,           m_Bz_Br,     m_Bz_Btheta,     m_Bz_Bz,     m_Bz_Vr,     m_Bz_Vtheta,     m_Bz_Vz    ],
                       [m_Vr_rho,     m_Vr_Br,     m_Vr_Btheta,     m_Vr_Bz,     m_Vr_Vr,     m0,              m0         ],
-                      [m0,           m_Vtheta_Br, m_Vtheta_Btheta, m0,          m0,          m_Vtheta_Vtheta, m0         ],
-                      [m_Vz_rho,     m0,          m_Vz_Btheta,     m0,          m0,          m0,              m_Vz_Vz    ]])
+                      [m_Vtheta_rho, m_Vtheta_Br, m_Vtheta_Btheta, m_Vtheta_Bz, m0,          m_Vtheta_Vtheta, m0         ],
+                      [m_Vz_rho,     m0,          m_Vz_Btheta,     m_Vz_Bz,     m0,          m0,              m_Vz_Vz    ]])
         return M
 
     def construct_rhs(self):
@@ -317,19 +324,24 @@ class LinearizedMHD:
 #             return self._sigma
 
     def solve_for_gamma(self):
-        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=2.1j, which='LI', return_eigenvectors=False).imag
+        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=3j, which='LI', return_eigenvectors=False).imag
 
     # ith mode by magnitude of imaginary part
     def plot_mode(self, i):
         if self.evects is None:
             return
-
+            
+        fd = self.equilibrium.sys.fd
         nr = self.equilibrium.sys.grid.N
         r = self.equilibrium.sys.grid.r
+        rr = self.equilibrium.sys.grid.rr
         z = self.equilibrium.sys.grid.r
         zz = self.equilibrium.sys.grid.rr
         rho_0 = self.equilibrium.rho
         B_0 = self.equilibrium.B
+        B_Z0 = self.equilibrium.sys.B_Z0
+        D_eta = self.equilibrium.sys.D_eta
+        D_H = self.equilibrium.sys.D_H
 
         index = np.argsort(self.evals.imag)
 
@@ -349,10 +361,10 @@ class LinearizedMHD:
         f = plt.figure()
         f.suptitle(omega.imag)
 
-        def f1(x): return np.abs(x)
-        def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
-#         def f1(x): return np.real(x)
-#         def f2(x): return np.imag(x)
+#         def f1(x): return np.abs(x)
+#         def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
+        def f1(x): return np.real(x)
+        def f2(x): return np.imag(x)
 
         ax = plt.subplot(3,3,1)
         ax.set_title('B_r')
@@ -444,7 +456,8 @@ class LinearizedMHD:
     
         # 2D quiver plot of V
         R, Z = np.meshgrid(r[1: -1], z[1: -1])
-        d_vec = 20
+        d_vec = 10
+        
         plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
                    V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], 
                    pivot='mid', width=0.002, scale=4)
@@ -452,7 +465,238 @@ class LinearizedMHD:
         plt.xlabel('r')
         plt.ylabel('z')
         plt.show()
+        
+        # Post-processing
+        rho = np.reshape(rho, (nr, 1))
+        B_r = np.reshape(B_r, (nr, 1))
+        B_theta = np.reshape(B_theta, (nr, 1))
+        B_z = np.reshape(B_z, (nr, 1))  
+        V_r = np.reshape(V_r, (nr, 1))
+        V_theta = np.reshape(V_theta, (nr, 1))
+        V_z = np.reshape(V_z, (nr, 1))     
+        rho = rho + rho_0
+        B_theta = B_theta + B_0
+        B_z = np.reshape(B_z + B_Z0, (nr, 1))
+        d_rB_dr = fd.ddr(1) @ (rr * B_theta)
+        d_Bz_dr = fd.ddr(1) @ B_z       
+        
+        J_r = 1 / (4 * np.pi) * -1j * self.k * B_theta
+        J_theta = 1 / (4 * np.pi) * (1j * self.k * B_r - d_Bz_dr)
+        J_z = 1 / (4 * np.pi * rr) * d_rB_dr 
+        E_r_ideal = V_z * B_theta - V_theta * B_z
+        E_theta_ideal = V_r * B_z - V_z * B_r
+        E_z_ideal = V_theta * B_r - V_r * B_theta
+        E_r_resistive = -D_eta * 1j * self.k * B_theta
+        E_theta_resistive = D_eta * (1j * self.k * B_r - d_Bz_dr)
+        E_z_resistive = D_eta / rr * d_rB_dr
+        E_r_hall = D_H / rho * (1j * self.k * B_r * B_z - B_z * d_Bz_dr - B_theta / rr * d_rB_dr)
+        E_theta_hall = D_H / rho * (B_r / rr * d_rB_dr + 1j * self.k * B_theta * B_z)
+        E_z_hall = D_H / rho * (B_r * d_Bz_dr - 1j * self.k * (B_r**2 + B_theta**2))
+        
+        # 1D eigenvectors of J and E
+        ax = plt.subplot(4,3,1)
+        ax.set_title('J_r')
+        ax.plot(r[1: -1], f1(phase * J_r[1: -1]),
+                r[1: -1], f2(phase * J_r[1: -1]))  
+              
+        ax = plt.subplot(4,3,2)
+        ax.set_title('J_theta')
+        ax.plot(r[1: -1], f1(phase * J_theta[1: -1]),
+                r[1: -1], f2(phase * J_theta[1: -1]) )
+            
+        ax = plt.subplot(4,3,3)
+        ax.set_title('J_z')
+        ax.plot(r[1: -1], f1(phase * J_z[1: -1]),
+                r[1: -1], f2(phase * J_z[1: -1]))    
+                    
+        ax = plt.subplot(4,3,4)
+        ax.set_title('E_r_ideal')
+        ax.plot(r[1: -1], f1(phase * E_r_ideal[1: -1]),
+                r[1: -1], f2(phase * E_r_ideal[1: -1]) )
+            
+        ax = plt.subplot(4,3,5)
+        ax.set_title('E_theta_ideal')
+        ax.plot(r[1: -1], f1(phase * E_theta_ideal[1: -1]),
+                r[1: -1], f2(phase * E_theta_ideal[1: -1]) )
+           
+        ax = plt.subplot(4,3,6)
+        ax.set_title('E_z_ideal')	
+        ax.plot(r[1: -1], f1(phase * E_z_ideal[1: -1]),
+                r[1: -1], f2(phase * E_z_ideal[1: -1]) )
+            
+        ax = plt.subplot(4,3,7)
+        ax.set_title('E_r_resistive')
+        ax.plot(r[1: -1], f1(phase * E_r_resistive[1: -1]),
+                r[1: -1], f2(phase * E_r_resistive[1: -1]) )
+            
+        ax = plt.subplot(4,3,8)
+        ax.set_title('E_theta_resistive')
+        ax.plot(r[1: -1], f1(phase * E_theta_resistive[1: -1]),
+                r[1: -1], f2(phase * E_theta_resistive[1: -1]) )
+           
+        ax = plt.subplot(4,3,9)
+        ax.set_title('E_z_resistive')	
+        ax.plot(r[1: -1], f1(phase * E_z_resistive[1: -1]),
+                r[1: -1], f2(phase * E_z_resistive[1: -1]) )
+                
+        ax = plt.subplot(4,3,10)
+        ax.set_title('E_r_hall')
+        ax.plot(r[1: -1], f1(phase * E_r_hall[1: -1]),
+                r[1: -1], f2(phase * E_r_hall[1: -1]) )
+            
+        ax = plt.subplot(4,3,11)
+        ax.set_title('E_theta_hall')
+        ax.plot(r[1: -1], f1(phase * E_theta_hall[1: -1]),
+                r[1: -1], f2(phase * E_theta_hall[1: -1]) )
+           
+        ax = plt.subplot(4,3,12)
+        ax.set_title('E_z_hall')	
+        ax.plot(r[1: -1], f1(phase * E_z_hall[1: -1]),
+                r[1: -1], f2(phase * E_z_hall[1: -1]) )
 
+        plt.show()
+        
+        # 2D contour plots of J and E
+        J_r = np.reshape(J_r, (nr, ))
+        J_theta = np.reshape(J_theta, (nr, ))
+        J_z = np.reshape(J_z, (nr, ))
+        E_r_ideal = np.reshape(E_r_ideal, (nr, ))
+        E_theta_ideal = np.reshape(E_theta_ideal, (nr, ))
+        E_z_ideal = np.reshape(E_z_ideal, (nr, ))
+        E_r_resistive = np.reshape(E_r_resistive, (nr, ))
+        E_theta_resistive = np.reshape(E_theta_resistive, (nr, ))
+        E_z_resistive = np.reshape(E_z_resistive, (nr, ))
+        E_r_hall = np.reshape(E_r_hall, (nr, ))
+        E_theta_hall = np.reshape(E_theta_hall, (nr, ))
+        E_z_hall = np.reshape(E_z_hall, (nr, ))
+        
+        J_r_contour = f1(z_osc[1: -1] * phase * J_r[1: -1])
+        J_theta_contour = f1(z_osc[1: -1] * phase * J_theta[1: -1])
+        J_z_contour = f1(z_osc[1: -1] * phase * J_z[1: -1])
+        E_r_ideal_contour = f1(z_osc[1: -1] * phase * E_r_ideal[1: -1])
+        E_theta_ideal_contour = f1(z_osc[1: -1] * phase * E_theta_ideal[1: -1])
+        E_z_ideal_contour = f1(z_osc[1: -1] * phase * E_z_ideal[1: -1])
+        E_r_resistive_contour = f1(z_osc[1: -1] * phase * E_r_resistive[1: -1])
+        E_theta_resistive_contour = f1(z_osc[1: -1] * phase * E_theta_resistive[1: -1])
+        E_z_resistive_contour = f1(z_osc[1: -1] * phase * E_z_resistive[1: -1])
+        E_r_hall_contour = f1(z_osc[1: -1] * phase * E_r_hall[1: -1])
+        E_theta_hall_contour = f1(z_osc[1: -1] * phase * E_theta_hall[1: -1])
+        E_z_hall_contour = f1(z_osc[1: -1] * phase * E_z_hall[1: -1])
+        
+        ax = plt.subplot(4,3,1)
+        ax.set_title('J_r')
+        plot_1 = ax.contourf(R, Z, J_r_contour, 100)
+        plt.colorbar(plot_1)
+    
+        ax = plt.subplot(4,3,2)
+        ax.set_title('J_theta')
+        plot_2 = ax.contourf(R, Z, J_theta_contour, 100)
+        plt.colorbar(plot_2)
+    
+        ax = plt.subplot(4,3,3)
+        ax.set_title('J_z')
+        plot_3 = ax.contourf(R, Z, J_z_contour, 100)
+        plt.colorbar(plot_3)
+    
+        ax = plt.subplot(4,3,4)
+        ax.set_title('E_r_ideal')
+        plot_4 = ax.contourf(R, Z, E_r_ideal_contour, 100)
+        plt.colorbar(plot_4)
+        
+        ax = plt.subplot(4,3,5)
+        ax.set_title('E_theta_ideal')
+        plot_5 = ax.contourf(R, Z, E_theta_ideal_contour, 100)
+        plt.colorbar(plot_5)
+    
+        ax = plt.subplot(4,3,6)
+        ax.set_title('E_z_ideal')
+        plot_6 = ax.contourf(R, Z, E_z_ideal_contour, 100)
+        plt.colorbar(plot_6)
+        
+        ax = plt.subplot(4,3,7)
+        ax.set_title('E_r_resistive')
+        plot_7 = ax.contourf(R, Z, E_r_resistive_contour, 100)
+        plt.colorbar(plot_7)
+        
+        ax = plt.subplot(4,3,8)
+        ax.set_title('E_theta_resistive')
+        plot_8 = ax.contourf(R, Z, E_theta_resistive_contour, 100)
+        plt.colorbar(plot_8)
+    
+        ax = plt.subplot(4,3,9)
+        ax.set_title('E_z_resistive')
+        plot_9 = ax.contourf(R, Z, E_z_resistive_contour, 100)
+        plt.colorbar(plot_9)
+        
+        ax = plt.subplot(4,3,10)
+        ax.set_title('E_r_hall')
+        plot_10 = ax.contourf(R, Z, E_r_hall_contour, 100)
+        plt.colorbar(plot_10)
+        
+        ax = plt.subplot(4,3,11)
+        ax.set_title('E_theta_hall')
+        plot_11 = ax.contourf(R, Z, E_theta_hall_contour, 100)
+        plt.colorbar(plot_11)
+    
+        ax = plt.subplot(4,3,12)
+        ax.set_title('E_z_hall')
+        plot_12 = ax.contourf(R, Z, E_z_hall_contour, 100)
+        plt.colorbar(plot_12)
+
+        plt.show()
+        
+        # 2D quiver plots of J and E
+        ax = plt.subplot(2,2,1)
+        ax.set_title('J')
+        ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
+                   J_r_contour[::d_vec, ::d_vec], J_z_contour[::d_vec, ::d_vec], 
+                   pivot='mid', width=0.002, scale=15)
+
+        ax = plt.subplot(2,2,2)
+        ax.set_title('E_ideal')
+        ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
+                   E_r_ideal_contour[::d_vec, ::d_vec], E_z_ideal_contour[::d_vec, ::d_vec], 
+                   pivot='mid', width=0.002, scale=20)
+    
+        ax = plt.subplot(2,2,3)
+        ax.set_title('E_resistive')
+        ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
+                   E_r_resistive_contour[::d_vec, ::d_vec], E_z_resistive_contour[::d_vec, ::d_vec], 
+                   pivot='mid', width=0.002, scale=100)
+    
+        ax = plt.subplot(2,2,4)
+        ax.set_title('E_hall')
+        ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
+                   E_r_hall_contour[::d_vec, ::d_vec], E_z_hall_contour[::d_vec, ::d_vec], 
+                   pivot='mid', width=0.002, scale=200)
+        
+        plt.show()
+        
+        # Total electric field
+#         ax = plt.subplot(2, 2, 1)
+#         ax.set_title('E_r_total')
+#         plot_1 = ax.contourf(R, Z, E_r_ideal_contour + E_r_resistive_contour + E_r_hall_contour, 100)
+#         plt.colorbar(plot_1)
+#         
+#         ax = plt.subplot(2, 2, 2)
+#         ax.set_title('E_theta_total')
+#         plot_2 = ax.contourf(R, Z, E_theta_ideal_contour + E_theta_resistive_contour + E_theta_hall_contour, 100)
+#         plt.colorbar(plot_2)
+#         
+#         ax = plt.subplot(2, 2, 3)
+#         ax.set_title('E_z_total')
+#         plot_3 = ax.contourf(R, Z, E_z_ideal_contour + E_z_resistive_contour + E_z_hall_contour, 100)
+#         plt.colorbar(plot_3)
+#         
+#         ax = plt.subplot(2, 2, 4)
+#         ax.set_title('E_total')
+#         ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
+#                    E_r_ideal_contour[::d_vec, ::d_vec] + E_r_resistive_contour[::d_vec, ::d_vec] + E_r_hall_contour[::d_vec, ::d_vec], 
+#                    E_z_ideal_contour[::d_vec, ::d_vec] + E_z_resistive_contour[::d_vec, ::d_vec] + E_z_hall_contour[::d_vec, ::d_vec], 
+#                    pivot='mid', width=0.002, scale=200)
+#         
+#         plt.show()
+        
     def plot_eigenvalues(self):
         if self.evals is None:
             return
