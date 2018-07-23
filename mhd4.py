@@ -3,12 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import erf
 
-sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
+sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=1, D_H=0.05, D_P=0, B_Z0=0)
 equ = MHDEquilibrium(sys, p_exp=4)
-lin = LinearizedMHD(equ, k=1, m=1)
+lin = LinearizedMHD(equ, k=1, m=0)
 
-lin.solve(num_modes=None)
-lin.plot_eigenvalues()
+lin.solve(num_modes=1)
+# lin.plot_eigenvalues()
 lin.plot_mode(-1)
 
 ## Exact solution comparison for p_exp = 4
@@ -17,10 +17,16 @@ lin.plot_mode(-1)
 
 def find_nearest(array, value): return (np.abs(array - value)).argmin()
 
-# print(sys.grid.dr * find_nearest(equ.p, 0.5))
-# plt.plot(sys.grid.r[1:-1], equ.p[1:-1], sys.grid.r[1:-1], equ.B[1:-1])
-# plt.legend(['P', 'B'])
+# i = find_nearest(sys.grid.rr, 1)
+# g = equ.B**2 / (8 * np.pi * equ.rho)
+# print(g[i])
+# plt.plot(sys.grid.r[1:-1], equ.p[1:-1], sys.grid.r[1:-1], equ.B[1:-1], sys.grid.r[1:-1], g[1:-1])
+# plt.legend(['P', 'B', 'g'])
 # plt.show()
+
+# i = np.argmax(equ.B)
+# g = equ.B[i]**2 / (8 * np.pi * 0.55 * sys.grid.rr[i])
+# print(g)
 
 ########################
 # sys = MHDSystem(N_r=100, r_max=2*np.pi, D_eta=1e-3, D_H=1e-3, D_P=0, B_Z0=0)
@@ -85,40 +91,21 @@ def find_nearest(array, value): return (np.abs(array - value)).argmin()
 
 ## gamma vs. k
 ## Need to increase resolution to find gammas for very low k.
-# k_vals = np.reshape(np.linspace(0.01, 6, 30), (30, 1))
-# gammas_k0 = []
-# gammas_k05 = []
-# gammas_k1 = []
+# k_vals = np.reshape(np.linspace(0.01, 0.2, 20), (20, 1))
+# gammas = []
 # 
-# sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0.5)
-# equ = MHDEquilibrium(sys, p_exp=4)
-# lin = LinearizedMHD(equ, k=1)
+# sys = MHDSystem(N_r=400, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
+# equ = MHDEquilibrium(sys, p_exp=12)
+# lin = LinearizedMHD(equ, k=1, m=0)
 # for k in k_vals:
 #     print(k)
-#     lin.set_z_mode(k)
-#     gammas_k0.append(lin.solve_for_gamma())
+#     lin.set_z_mode(k, m=0)
+#     gammas.append(lin.solve_for_gamma())
 # 
-# sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=0.5, D_H=0, D_P=0, B_Z0=0.5)
-# equ = MHDEquilibrium(sys, p_exp=4)
-# lin = LinearizedMHD(equ, k=1)
-# for k in k_vals:
-#     print(k)
-#     lin.set_z_mode(k)
-#     gammas_k05.append(lin.solve_for_gamma())
-#     
-# sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=1, D_H=0, D_P=0, B_Z0=0.5)
-# equ = MHDEquilibrium(sys, p_exp=4)
-# lin = LinearizedMHD(equ, k=1)
-# for k in k_vals:
-#     print(k)
-#     lin.set_z_mode(k)
-#     gammas_k1.append(lin.solve_for_gamma())
-# 
-# plt.plot(k_vals, gammas_k0, k_vals, gammas_k05, k_vals, gammas_k1)
+# plt.plot(k_vals, gammas, k_vals, g[i] * k_vals)
 # plt.title('Fastest growing mode')
 # plt.xlabel('k')
 # plt.ylabel('gamma')
-# plt.legend(['D_eta = 0', 'D_eta = 0.5', 'D_eta = 1'])
 # plt.show()
 
 

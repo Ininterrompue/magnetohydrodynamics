@@ -254,11 +254,13 @@ class LinearizedMHD:
         m_Vz_Vz = fd.zeros()
         
         # Resistive term
-        m_Br_Br = m_Br_Br + 1j * D_eta * ((1 / rr * fd.ddr(1) + fd.ddr(2)) - fd.diag(k**2 + 1 / rr**2))
-        m_Btheta_Btheta = m_Btheta_Btheta + 1j * D_eta * ((1 / rr * fd.ddr(1) + fd.ddr(2)) - fd.diag(k**2 + 1 / rr**2))
-        m_Bz_Bz = m_Bz_Bz + 1j * D_eta * ((1 / rr * fd.ddr(1) + fd.ddr(2)) - fd.diag(k**2)) 
+        m_Br_Br = m_Br_Br + D_eta * (1j / rr * fd.ddr(1) + 1j * fd.ddr(2) - fd.diag(1j * m**2 / rr**2 + 1j * k**2 + 1j / rr**2))
+        m_Br_Btheta = m_Br_Btheta + D_eta * fd.diag(2 * m / rr**2)
+        m_Btheta_Btheta = m_Btheta_Btheta + D_eta * (1j / rr * fd.ddr(1) + 1j * fd.ddr(2) - fd.diag(1j * m**2 / rr**2 + 1j * k**2 + 1j / rr**2))
+        m_Btheta_Br = m_Btheta_Br + D_eta * fd.diag(-2 * m / rr**2)
+        m_Bz_Bz = m_Bz_Bz + D_eta * (1j / rr * fd.ddr(1) + 1j * fd.ddr(2) - fd.diag(1j * m**2 / rr**2 + 1j * k**2)) 
         
-        # Hall term
+        # Hall term (m = 0 only)
         m_Br_Br = m_Br_Br + D_H * fd.diag(-k / (rr * rho) * (fd.ddr(1) @ (rr * B)))
         m_Br_Btheta = m_Br_Btheta + D_H * fd.diag(-1j * B_Z0 * k**2 / rho)    
         m_Btheta_rho = m_Btheta_rho + D_H * fd.diag(-8 * np.pi * k / rho**2 * (fd.ddr(1) @ rho))
@@ -324,7 +326,7 @@ class LinearizedMHD:
 #             return self._sigma
 
     def solve_for_gamma(self):
-        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=3j, which='LI', return_eigenvectors=False).imag
+        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=0.5j, which='LI', return_eigenvectors=False).imag
 
     # ith mode by magnitude of imaginary part
     def plot_mode(self, i):
@@ -419,51 +421,39 @@ class LinearizedMHD:
     
         ax = plt.subplot(3,3,1)
         ax.set_title('B_r')
-        plot_1 = ax.contourf(R, Z, B_r_contour, 100)
+        plot_1 = ax.contourf(R, Z, B_r_contour, 20)
         plt.colorbar(plot_1)
     
         ax = plt.subplot(3,3,2)
         ax.set_title('B_theta')
-        plot_2 = ax.contourf(R, Z, B_theta_contour, 100)
+        plot_2 = ax.contourf(R, Z, B_theta_contour, 20)
         plt.colorbar(plot_2)
     
         ax = plt.subplot(3,3,3)
         ax.set_title('B_z')
-        plot_3 = ax.contourf(R, Z, B_z_contour, 100)
+        plot_3 = ax.contourf(R, Z, B_z_contour, 20)
         plt.colorbar(plot_3)
     
         ax = plt.subplot(3,3,4)
         ax.set_title('V_r')
-        plot_4 = ax.contourf(R, Z, V_r_contour, 100)
+        plot_4 = ax.contourf(R, Z, V_r_contour, 20)
         plt.colorbar(plot_4)
         
         ax = plt.subplot(3,3,5)
         ax.set_title('V_theta')
-        plot_5 = ax.contourf(R, Z, V_theta_contour, 100)
+        plot_5 = ax.contourf(R, Z, V_theta_contour, 20)
         plt.colorbar(plot_5)
     
         ax = plt.subplot(3,3,6)
         ax.set_title('V_z')
-        plot_6 = ax.contourf(R, Z, V_z_contour, 100)
+        plot_6 = ax.contourf(R, Z, V_z_contour, 20)
         plt.colorbar(plot_6)
     
         ax = plt.subplot(3,3,7)
         ax.set_title('rho')
-        plot_7 = ax.contourf(R, Z, rho_contour, 100)
+        plot_7 = ax.contourf(R, Z, rho_contour, 20)
         plt.colorbar(plot_7)
     
-        plt.show()
-    
-        # 2D quiver plot of V
-        R, Z = np.meshgrid(r[1: -1], z[1: -1])
-        d_vec = 10
-        
-        plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
-                   V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], 
-                   pivot='mid', width=0.002, scale=4)
-        plt.title('Flow velocity')
-        plt.xlabel('r')
-        plt.ylabel('z')
         plt.show()
         
         # Post-processing
@@ -492,6 +482,22 @@ class LinearizedMHD:
         E_r_hall = D_H / rho * (1j * self.k * B_r * B_z - B_z * d_Bz_dr - B_theta / rr * d_rB_dr)
         E_theta_hall = D_H / rho * (B_r / rr * d_rB_dr + 1j * self.k * B_theta * B_z)
         E_z_hall = D_H / rho * (B_r * d_Bz_dr - 1j * self.k * (B_r**2 + B_theta**2))
+        vort_theta = np.reshape(1j * self.k * V_r - (fd.ddr(1) @ V_z), (nr, ))
+        vort_theta_contour = f1(z_osc[1: -1] * phase * vort_theta[1: -1])
+
+        # V and vorticity
+        plot = plt.contourf(R, Z, vort_theta_contour, 20)
+        plt.colorbar(plot)
+        
+        d_vec = 10
+        plt.title('Flow velocity and vorticity')
+        plt.xlabel('r')
+        plt.ylabel('z')
+        quiv = plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
+                   V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], 
+                   pivot='mid', width=0.002, scale=4)
+        
+        plt.show()
         
         # 1D eigenvectors of J and E
         ax = plt.subplot(4,3,1)
@@ -585,62 +591,62 @@ class LinearizedMHD:
         
         ax = plt.subplot(4,3,1)
         ax.set_title('J_r')
-        plot_1 = ax.contourf(R, Z, J_r_contour, 100)
+        plot_1 = ax.contourf(R, Z, J_r_contour, 20)
         plt.colorbar(plot_1)
     
         ax = plt.subplot(4,3,2)
         ax.set_title('J_theta')
-        plot_2 = ax.contourf(R, Z, J_theta_contour, 100)
+        plot_2 = ax.contourf(R, Z, J_theta_contour, 20)
         plt.colorbar(plot_2)
     
         ax = plt.subplot(4,3,3)
         ax.set_title('J_z')
-        plot_3 = ax.contourf(R, Z, J_z_contour, 100)
+        plot_3 = ax.contourf(R, Z, J_z_contour, 20)
         plt.colorbar(plot_3)
     
         ax = plt.subplot(4,3,4)
         ax.set_title('E_r_ideal')
-        plot_4 = ax.contourf(R, Z, E_r_ideal_contour, 100)
+        plot_4 = ax.contourf(R, Z, E_r_ideal_contour, 20)
         plt.colorbar(plot_4)
         
         ax = plt.subplot(4,3,5)
         ax.set_title('E_theta_ideal')
-        plot_5 = ax.contourf(R, Z, E_theta_ideal_contour, 100)
+        plot_5 = ax.contourf(R, Z, E_theta_ideal_contour, 20)
         plt.colorbar(plot_5)
     
         ax = plt.subplot(4,3,6)
         ax.set_title('E_z_ideal')
-        plot_6 = ax.contourf(R, Z, E_z_ideal_contour, 100)
+        plot_6 = ax.contourf(R, Z, E_z_ideal_contour, 20)
         plt.colorbar(plot_6)
         
         ax = plt.subplot(4,3,7)
         ax.set_title('E_r_resistive')
-        plot_7 = ax.contourf(R, Z, E_r_resistive_contour, 100)
+        plot_7 = ax.contourf(R, Z, E_r_resistive_contour, 20)
         plt.colorbar(plot_7)
         
         ax = plt.subplot(4,3,8)
         ax.set_title('E_theta_resistive')
-        plot_8 = ax.contourf(R, Z, E_theta_resistive_contour, 100)
+        plot_8 = ax.contourf(R, Z, E_theta_resistive_contour, 20)
         plt.colorbar(plot_8)
     
         ax = plt.subplot(4,3,9)
         ax.set_title('E_z_resistive')
-        plot_9 = ax.contourf(R, Z, E_z_resistive_contour, 100)
+        plot_9 = ax.contourf(R, Z, E_z_resistive_contour, 20)
         plt.colorbar(plot_9)
         
         ax = plt.subplot(4,3,10)
         ax.set_title('E_r_hall')
-        plot_10 = ax.contourf(R, Z, E_r_hall_contour, 100)
+        plot_10 = ax.contourf(R, Z, E_r_hall_contour, 20)
         plt.colorbar(plot_10)
         
         ax = plt.subplot(4,3,11)
         ax.set_title('E_theta_hall')
-        plot_11 = ax.contourf(R, Z, E_theta_hall_contour, 100)
+        plot_11 = ax.contourf(R, Z, E_theta_hall_contour, 20)
         plt.colorbar(plot_11)
     
         ax = plt.subplot(4,3,12)
         ax.set_title('E_z_hall')
-        plot_12 = ax.contourf(R, Z, E_z_hall_contour, 100)
+        plot_12 = ax.contourf(R, Z, E_z_hall_contour, 20)
         plt.colorbar(plot_12)
 
         plt.show()
@@ -675,17 +681,17 @@ class LinearizedMHD:
         # Total electric field
         ax = plt.subplot(2, 2, 1)
         ax.set_title('E_r_total')
-        plot_1 = ax.contourf(R, Z, E_r_ideal_contour + E_r_resistive_contour + E_r_hall_contour, 100)
+        plot_1 = ax.contourf(R, Z, E_r_ideal_contour + E_r_resistive_contour + E_r_hall_contour, 20)
         plt.colorbar(plot_1)
         
         ax = plt.subplot(2, 2, 2)
         ax.set_title('E_theta_total')
-        plot_2 = ax.contourf(R, Z, E_theta_ideal_contour + E_theta_resistive_contour + E_theta_hall_contour, 100)
+        plot_2 = ax.contourf(R, Z, E_theta_ideal_contour + E_theta_resistive_contour + E_theta_hall_contour, 20)
         plt.colorbar(plot_2)
         
         ax = plt.subplot(2, 2, 3)
         ax.set_title('E_z_total')
-        plot_3 = ax.contourf(R, Z, E_z_ideal_contour + E_z_resistive_contour + E_z_hall_contour, 100)
+        plot_3 = ax.contourf(R, Z, E_z_ideal_contour + E_z_resistive_contour + E_z_hall_contour, 20)
         plt.colorbar(plot_3)
         
         ax = plt.subplot(2, 2, 4)
