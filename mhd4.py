@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import erf
 
-sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=1, D_H=0.05, D_P=0, B_Z0=0)
+sys = MHDSystem(N_r=600, N_ghost=1, r_max=2*np.pi, D_eta=1e-2, D_H=1e-3, D_P=0, B_Z0=0)
 equ = MHDEquilibrium(sys, p_exp=4)
 lin = LinearizedMHD(equ, k=1, m=0)
 
