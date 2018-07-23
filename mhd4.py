@@ -3,13 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import erf
 
-sys = MHDSystem(N_r=600, N_ghost=1, r_max=2*np.pi, D_eta=1e-2, D_H=1e-3, D_P=0, B_Z0=0)
+sys = MHDSystem(N_r=400, N_ghost=1, r_max=2*np.pi, D_eta=5e-2, D_H=5e-3, D_P=0, B_Z0=0)
 equ = MHDEquilibrium(sys, p_exp=4)
 lin = LinearizedMHD(equ, k=1, m=0)
 
 lin.solve(num_modes=1)
 # lin.plot_eigenvalues()
-lin.plot_mode(-1)
+# lin.plot_VB(-1, epsilon=0.1)
+lin.plot_EJ(-1, epsilon=0.05)
 
 ## Exact solution comparison for p_exp = 4
 # B_exact_2 = np.sqrt(np.pi) / sys.grid.rr**2 * erf(sys.grid.rr**2) - 2 * np.exp(-sys.grid.rr**4)
