@@ -204,6 +204,7 @@ class LinearizedMHD:
         rr = self.equilibrium.sys.grid.rr
         rho = self.equilibrium.rho
         B = self.equilibrium.B
+        p = self.equilibrium.p
 
         # get plasma parameters from the system
         D_eta = self.equilibrium.sys.D_eta
@@ -226,7 +227,7 @@ class LinearizedMHD:
         m_Bz_Vtheta = fd.diag(m * B_Z0 / rr)
         m_Bz_Vz = fd.diag(-m * B / rr)
         
-        m_Vr_rho = -2j * fd.ddr(1) / rho
+        m_Vr_p = -1j * fd.ddr(1) / rho
         m_Vr_Br = fd.diag(-B_Z0 * k / (4 * np.pi * rho) - m * B / (4 * np.pi * rho * rr))
         m_Vr_Btheta = -1j * fd.ddr_product(rr**2 * B) / (4 * np.pi * rho * rr**2)
         m_Vr_Bz = -1j * B_Z0 / (4 * np.pi * rho) * fd.ddr(1)
@@ -236,9 +237,12 @@ class LinearizedMHD:
         m_Vtheta_Btheta = fd.diag(-B_Z0 * k / (4 * np.pi * rho))
         m_Vtheta_Bz = fd.diag(m * B_Z0 / (4 * np.pi * rho * rr))
         
-        m_Vz_rho = fd.diag(2.0 * k / rho)
+        m_Vz_p = fd.diag(k / rho)
         m_Vz_Btheta = fd.diag(k * B / (4 * np.pi * rho))
         m_Vz_Bz = fd.diag(-m * B / (4 * np.pi * rho * rr))
+        
+        m_p_Vr = fd.diag(-1j * (fd.ddr(1) @ p)) - 2 * 1j * p / rr * fd.ddr_product(rr)
+        m_p_Vz = fd.diag(2 * p * k)
        
         m0 = fd.zeros()
         m_rho_rho = fd.zeros()
@@ -248,12 +252,14 @@ class LinearizedMHD:
         m_Btheta_Br = fd.zeros()
         m_Btheta_Btheta = fd.zeros()
         m_Btheta_Bz = fd.zeros()
+        m_Btheta_p = fd.zeros()
         m_Bz_Br = fd.zeros()
         m_Bz_Btheta = fd.zeros()
         m_Bz_Bz = fd.zeros()
         m_Vr_Vr = fd.zeros()
         m_Vtheta_Vtheta = fd.zeros()
         m_Vz_Vz = fd.zeros()
+        m_p_p = fd.zeros()
         
         # Resistive term
         m_Br_Br = m_Br_Br + D_eta * (1j / rr * fd.ddr(1) + 1j * fd.ddr(2) - fd.diag(1j * m**2 / rr**2 + 1j * k**2 + 1j / rr**2))
@@ -276,7 +282,8 @@ class LinearizedMHD:
         m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) - fd.diag(k * B_Z0 / rho**2 * (fd.ddr(1) @ rho)))
         
         # Electron pressure term is 0 for our current equation of state
-        # m_Btheta_rho = m_Btheta_rho + D_P * fd.diag(2 * k / rho**2 * (fd.ddr(1) @ rho) + 2 * k * (fd.ddr(1) @ (1 / rho)))
+        m_Btheta_rho = m_Btheta_rho + D_P * fd.diag(-k / rho**2 * (fd.ddr(1) @ p))
+        m_Btheta_p = m_Btheta_p + D_P * fd.diag(k / rho**2 * (fd.ddr(1) @ rho))
         
         # Boundary conditions
         m_rho_rho       = m_rho_rho       + fd.lhs_bc('derivative') + fd.rhs_bc('value')
@@ -286,46 +293,35 @@ class LinearizedMHD:
         m_Vr_Vr         = m_Vr_Vr         + fd.lhs_bc('value')      + fd.rhs_bc('derivative')
         m_Vtheta_Vtheta = m_Vtheta_Vtheta + fd.lhs_bc('value')      + fd.rhs_bc('value')
         m_Vz_Vz         = m_Vz_Vz         + fd.lhs_bc('derivative') + fd.rhs_bc('value')
+        m_p_p           = m_p_p           + fd.lhs_bc('derivative') + fd.rhs_bc('value')
                       
-        M = np.block([[m_rho_rho,    m0,          m0,              m0,          m_rho_Vr,    m_rho_Vtheta,    m_rho_Vz   ], 
-                      [m0,           m_Br_Br,     m_Br_Btheta,     m0,          m_Br_Vr,     m0,              m0         ],
-                      [m_Btheta_rho, m_Btheta_Br, m_Btheta_Btheta, m_Btheta_Bz, m_Btheta_Vr, m_Btheta_Vtheta, m_Btheta_Vz],
-                      [m0,           m_Bz_Br,     m_Bz_Btheta,     m_Bz_Bz,     m_Bz_Vr,     m_Bz_Vtheta,     m_Bz_Vz    ],
-                      [m_Vr_rho,     m_Vr_Br,     m_Vr_Btheta,     m_Vr_Bz,     m_Vr_Vr,     m0,              m0         ],
-                      [m_Vtheta_rho, m_Vtheta_Br, m_Vtheta_Btheta, m_Vtheta_Bz, m0,          m_Vtheta_Vtheta, m0         ],
-                      [m_Vz_rho,     m0,          m_Vz_Btheta,     m_Vz_Bz,     m0,          m0,              m_Vz_Vz    ]])
+        M = np.block([[m_rho_rho,    m0,          m0,              m0,          m_rho_Vr,    m_rho_Vtheta,    m_rho_Vz,    m0        ], 
+                      [m0,           m_Br_Br,     m_Br_Btheta,     m0,          m_Br_Vr,     m0,              m0 ,         m0        ],
+                      [m_Btheta_rho, m_Btheta_Br, m_Btheta_Btheta, m_Btheta_Bz, m_Btheta_Vr, m_Btheta_Vtheta, m_Btheta_Vz, m_Btheta_p],
+                      [m0,           m_Bz_Br,     m_Bz_Btheta,     m_Bz_Bz,     m_Bz_Vr,     m_Bz_Vtheta,     m_Bz_Vz,     m0        ],
+                      [m0,           m_Vr_Br,     m_Vr_Btheta,     m_Vr_Bz,     m_Vr_Vr,     m0,              m0,          m_Vr_p    ],
+                      [m_Vtheta_rho, m_Vtheta_Br, m_Vtheta_Btheta, m_Vtheta_Bz, m0,          m_Vtheta_Vtheta, m0,          m0        ],
+                      [m0,           m0,          m_Vz_Btheta,     m_Vz_Bz,     m0,          m0,              m_Vz_Vz,     m_Vz_p    ],
+                      [m0,           m0,          m0,              m0,          m_p_Vr,      m0,              m_p_Vz,      m_p_p     ]])
         return M
 
     def construct_rhs(self):
         # Generalized eigenvalue problem matrix
         nr = self.equilibrium.sys.grid.N
-        G = np.identity(7 * nr)
+        G = np.identity(8 * nr)
         G[0, 0] = G[nr - 1, nr - 1] = G[nr, nr] = G[2*nr - 1, 2*nr - 1] = 0
         G[2*nr, 2*nr] = G[3*nr - 1, 3*nr - 1] = G[3*nr, 3*nr] = 0
         G[4*nr - 1, 4*nr - 1] = G[4*nr, 4*nr] = G[5*nr - 1, 5*nr - 1] = 0
         G[5*nr, 5*nr] = G[6*nr - 1, 6*nr - 1] = G[6*nr - 6*nr] = 0
-        G[-1, -1] = 0
+        G[7*nr - 1, 7*nr - 1] = G[7*nr, 7*nr] = G[-1, -1] = 0
         return G
 
     def solve(self, num_modes=None):
         if num_modes:
             self.evals, self.evects = eigs(self.fd_operator, k=num_modes, M=self.fd_rhs,
-                                           sigma=2j, which='LI', return_eigenvectors=True)
+                                           sigma=3j, which='LI', return_eigenvectors=True)
         else:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
-        
-#     def solve_for_gamma(self, use_cached_sigma=False):
-#         if use_cached_sigma or self._sigma:
-#             e = eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=self._sigma*1j,
-#                         which='LI', return_eigenvectors=False).imag
-#             self._sigma = e
-#             print(e)
-#             return e
-#         else:
-#             self._sigma = eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=1j,
-#                         which='LI', return_eigenvectors=False).imag
-#             print(self._sigma)
-#             return self._sigma
 
     def solve_for_gamma(self):
         return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=0.5j, which='LI', return_eigenvectors=False).imag
@@ -341,6 +337,7 @@ class LinearizedMHD:
         z = self.equilibrium.sys.grid.r
         zz = self.equilibrium.sys.grid.rr
         rho_0 = self.equilibrium.rho
+        p_0 = self.equilibrium.p
         B_0 = self.equilibrium.B
         B_Z0 = self.equilibrium.sys.B_Z0
 
@@ -357,7 +354,12 @@ class LinearizedMHD:
         V_r = epsilon * phase * v_omega[4*nr: 5*nr]
         V_theta = epsilon * phase * v_omega[5*nr: 6*nr]
         V_z = epsilon * phase * v_omega[6*nr: 7*nr]
+        p = epsilon * phase * v_omega[7*nr: 8*nr]
         
+        p_0 = np.reshape(p_0, (nr, ))
+        rho_0 = np.reshape(rho_0, (nr, ))
+        temp = (p + p_0) / (2 * (rho + rho_0))
+      
         # 1D eigenvectors
         f = plt.figure()
         f.suptitle(omega.imag)
@@ -401,11 +403,21 @@ class LinearizedMHD:
         ax.set_title('rho')
         ax.plot(r[1: -1], f1(rho[1: -1]),
                 r[1: -1], f2(rho[1: -1]))
+                
+        ax = plt.subplot(3,3,8)
+        ax.set_title('p')
+        ax.plot(r[1: -1], f1(p[1: -1]),
+                r[1: -1], f2(p[1: -1]))
+                
+        ax = plt.subplot(3,3,9)
+        ax.set_title('T')
+        ax.plot(r[1: -1], f1(temp[1: -1]))
 
         plt.show()
         
         # 2D contour plots
         z_osc = np.exp(1j * self.k * zz)
+        
         rho_contour = rho_0[1: -1].T + f1(z_osc[1: -1] * rho[1: -1])
         B_r_contour = f1(z_osc[1: -1] * B_r[1: -1])
         B_theta_contour = B_0[1: -1].T + f1(z_osc[1: -1] * B_theta[1: -1])
@@ -413,6 +425,8 @@ class LinearizedMHD:
         V_r_contour = f1(z_osc[1: -1] * V_r[1: -1])
         V_theta_contour = f1(z_osc[1: -1] * V_theta[1: -1])
         V_z_contour = f1(z_osc[1: -1] * V_z[1: -1])
+        p_contour = p_0[1: -1].T + f1(z_osc[1: -1] * p[1: -1])
+        # temp_contour = 1 + f1(z_osc[1: -1] * temp[1: -1])
         
         f = plt.figure()
         f.suptitle(omega.imag)
@@ -452,6 +466,16 @@ class LinearizedMHD:
         ax.set_title('rho')
         plot_7 = ax.contourf(R, Z, rho_contour, 20)
         plt.colorbar(plot_7)
+        
+        ax = plt.subplot(3,3,8)
+        ax.set_title('p')
+        plot_8 = ax.contourf(R, Z, p_contour, 20)
+        plt.colorbar(plot_8)
+        
+#         ax = plt.subplot(3,3,9)
+#         ax.set_title('T')
+#         plot_9 = ax.contourf(R, Z, temp_contour, 20)
+#         plt.colorbar(plot_9)
     
         plt.show()
         
@@ -468,7 +492,7 @@ class LinearizedMHD:
         plt.ylabel('z')
         quiv = plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
                    V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], 
-                   pivot='mid', width=0.002, scale=0.4)
+                   pivot='mid', width=0.002, scale=0.2)
         
         plt.show()
         
@@ -487,7 +511,9 @@ class LinearizedMHD:
         J_0 = self.equilibrium.J
         D_eta = self.equilibrium.sys.D_eta
         D_H = self.equilibrium.sys.D_H
+        D_P = self.equilibrium.sys.D_P
         B_Z0 = self.equilibrium.sys.B_Z0
+        p_0 = self.equilibrium.p
 
         index = np.argsort(self.evals.imag)
         omega = self.evals[index[i]]
@@ -502,6 +528,7 @@ class LinearizedMHD:
         V_r = epsilon * phase * v_omega[4*nr: 5*nr]
         V_theta = epsilon * phase * v_omega[5*nr: 6*nr]
         V_z = epsilon * phase * v_omega[6*nr: 7*nr]
+        p = epsilon * phase * v_omega[7*nr: 8*nr]
         
 #         def f1(x): return np.abs(x)
 #         def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
@@ -516,11 +543,13 @@ class LinearizedMHD:
         V_r = np.reshape(V_r, (nr, 1))
         V_theta = np.reshape(V_theta, (nr, 1))
         V_z = np.reshape(V_z, (nr, 1))
-        B_Z1 = np.reshape(B_z, (nr, 1))     
+        B_Z1 = np.reshape(B_z, (nr, 1))
+        p_1 = np.reshape(p, (nr, 1))     
         
         rho = rho_0 + rho_1
         B_theta = B_0 + B_1
         B_z = B_Z0 * np.reshape(np.ones(nr), (nr, 1)) + B_Z1
+        p = p_0 + p_1
         
         d_rB_dr = fd.ddr(1) @ (rr * B_theta)
         d_Bz_dr = fd.ddr(1) @ B_z    
@@ -544,66 +573,88 @@ class LinearizedMHD:
         E_theta_hall = 4 * np.pi * D_H / rho * (J_z * B_r - J_r * B_z)
         E_z_hall = 4 * np.pi * D_H / rho * (J_r * B_theta - J_theta * B_r)
         
+        E_r0_pressure = -D_P / rho_0 * (fd.ddr(1) @ p_0)
+        E_r1_pressure = -D_P / rho * (fd.ddr(1) @ p) - E_r0_pressure
+        E_theta_pressure = np.zeros(nr)
+        E_z_pressure = -D_P / rho * 1j * self.k * p_1
+        
         # 1D perturbations of J and E
-        ax = plt.subplot(4,3,1)
+        ax = plt.subplot(1,3,1)
         ax.set_title('J_r')
         ax.plot(r[1: -1], f1(J_r[1: -1]),
                 r[1: -1], f2(J_r[1: -1]))  
               
-        ax = plt.subplot(4,3,2)
+        ax = plt.subplot(1,3,2)
         ax.set_title('J_theta')
         ax.plot(r[1: -1], f1(J_theta[1: -1]),
                 r[1: -1], f2(J_theta[1: -1]))
             
-        ax = plt.subplot(4,3,3)
+        ax = plt.subplot(1,3,3)
         ax.set_title('J_z')
         ax.plot(r[1: -1], f1(J_z1[1: -1]),
-                r[1: -1], f2(J_z1[1: -1]))    
+                r[1: -1], f2(J_z1[1: -1]))
+                
+        plt.show()    
                     
-        ax = plt.subplot(4,3,4)
+        ax = plt.subplot(4,3,1)
         ax.set_title('E_r_ideal')
         ax.plot(r[1: -1], f1(E_r_ideal[1: -1]),
                 r[1: -1], epsilon * f2(E_r_ideal[1: -1]))
             
-        ax = plt.subplot(4,3,5)
+        ax = plt.subplot(4,3,2)
         ax.set_title('E_theta_ideal')
         ax.plot(r[1: -1], f1(E_theta_ideal[1: -1]),
                 r[1: -1], f2(E_theta_ideal[1: -1]))
            
-        ax = plt.subplot(4,3,6)
+        ax = plt.subplot(4,3,3)
         ax.set_title('E_z_ideal')	
         ax.plot(r[1: -1], f1(E_z_ideal[1: -1]),
                 r[1: -1], f2(E_z_ideal[1: -1]))
             
-        ax = plt.subplot(4,3,7)
+        ax = plt.subplot(4,3,4)
         ax.set_title('E_r_resistive')
         ax.plot(r[1: -1], f1(E_r_resistive[1: -1]),
                 r[1: -1], f2(E_r_resistive[1: -1]))
             
-        ax = plt.subplot(4,3,8)
+        ax = plt.subplot(4,3,5)
         ax.set_title('E_theta_resistive')
         ax.plot(r[1: -1], f1(E_theta_resistive[1: -1]),
                 r[1: -1], f2(E_theta_resistive[1: -1]))
            
-        ax = plt.subplot(4,3,9)
+        ax = plt.subplot(4,3,6)
         ax.set_title('E_z_resistive')	
         ax.plot(r[1: -1], f1(E_z1_resistive[1: -1]),
                 r[1: -1], f2(E_z1_resistive[1: -1]))
                 
-        ax = plt.subplot(4,3,10)
+        ax = plt.subplot(4,3,7)
         ax.set_title('E_r_hall')
         ax.plot(r[1: -1], f1(E_r1_hall[1: -1]),
                 r[1: -1], f2(E_r1_hall[1: -1]))
             
-        ax = plt.subplot(4,3,11)
+        ax = plt.subplot(4,3,8)
         ax.set_title('E_theta_hall')
         ax.plot(r[1: -1], f1(E_theta_hall[1: -1]),
                 r[1: -1], f2(E_theta_hall[1: -1]))
            
-        ax = plt.subplot(4,3,12)
+        ax = plt.subplot(4,3,9)
         ax.set_title('E_z_hall')	
         ax.plot(r[1: -1], f1(E_z_hall[1: -1]),
                 r[1: -1], f2(E_z_hall[1: -1]))
+                
+        ax = plt.subplot(4,3,10)
+        ax.set_title('E_r_pressure')
+        ax.plot(r[1: -1], f1(E_r1_pressure[1: -1]),
+                r[1: -1], f2(E_r1_pressure[1: -1]))
+            
+        ax = plt.subplot(4,3,11)
+        ax.set_title('E_theta_pressure')
+        ax.plot(r[1: -1], f1(E_theta_pressure[1: -1]),
+                r[1: -1], f2(E_theta_pressure[1: -1]))
+           
+        ax = plt.subplot(4,3,12)
+        ax.set_title('E_z_pressure')	
+        ax.plot(r[1: -1], f1(E_z_pressure[1: -1]),
+                r[1: -1], f2(E_z_pressure[1: -1]))
 
         plt.show()
         
@@ -625,6 +676,9 @@ class LinearizedMHD:
         E_r1_hall = np.reshape(E_r1_hall, (nr, ))
         E_theta_hall = np.reshape(E_theta_hall, (nr, ))
         E_z_hall = np.reshape(E_z_hall, (nr, ))
+        E_r0_pressure = np.reshape(E_r0_pressure, (nr, ))
+        E_r1_pressure = np.reshape(E_r1_pressure, (nr, ))
+        E_z_pressure = np.reshape(E_z_pressure, (nr, ))
         
         J_r_contour = f1(z_osc[1: -1] * J_r[1: -1])
         J_theta_contour = f1(z_osc[1: -1] * J_theta[1: -1])
@@ -638,118 +692,143 @@ class LinearizedMHD:
         E_r_hall_contour = E_r0_hall[1: -1].T + f1(z_osc[1: -1] * E_r1_hall[1: -1])
         E_theta_hall_contour = f1(z_osc[1: -1] * E_theta_hall[1: -1])
         E_z_hall_contour = f1(z_osc[1: -1] * E_z_hall[1: -1])
+        E_r_pressure_contour = E_r0_pressure[1: -1].T + f1(z_osc[1: -1] * E_r1_pressure[1: -1])
+        E_theta_pressure_contour = f1(z_osc[1: -1] * E_theta_pressure[1: -1])
+        E_z_pressure_contour = f1(z_osc[1: -1] * E_z_pressure[1: -1])
         
-        ax = plt.subplot(4,3,1)
+        ax = plt.subplot(1,3,1)
         ax.set_title('J_r')
         plot_1 = ax.contourf(R, Z, J_r_contour, 20)
         plt.colorbar(plot_1)
     
-        ax = plt.subplot(4,3,2)
+        ax = plt.subplot(1,3,2)
         ax.set_title('J_theta')
         plot_2 = ax.contourf(R, Z, J_theta_contour, 20)
         plt.colorbar(plot_2)
     
-        ax = plt.subplot(4,3,3)
+        ax = plt.subplot(1,3,3)
         ax.set_title('J_z')
         plot_3 = ax.contourf(R, Z, J_z_contour, 20)
         plt.colorbar(plot_3)
     
-        ax = plt.subplot(4,3,4)
+        ax = plt.subplot(4,3,1)
         ax.set_title('E_r_ideal')
         plot_4 = ax.contourf(R, Z, E_r_ideal_contour, 20)
         plt.colorbar(plot_4)
         
-        ax = plt.subplot(4,3,5)
+        ax = plt.subplot(4,3,2)
         ax.set_title('E_theta_ideal')
         plot_5 = ax.contourf(R, Z, E_theta_ideal_contour, 20)
         plt.colorbar(plot_5)
     
-        ax = plt.subplot(4,3,6)
+        ax = plt.subplot(4,3,3)
         ax.set_title('E_z_ideal')
         plot_6 = ax.contourf(R, Z, E_z_ideal_contour, 20)
         plt.colorbar(plot_6)
         
-        ax = plt.subplot(4,3,7)
+        ax = plt.subplot(4,3,4)
         ax.set_title('E_r_resistive')
         plot_7 = ax.contourf(R, Z, E_r_resistive_contour, 20)
         plt.colorbar(plot_7)
         
-        ax = plt.subplot(4,3,8)
+        ax = plt.subplot(4,3,5)
         ax.set_title('E_theta_resistive')
         plot_8 = ax.contourf(R, Z, E_theta_resistive_contour, 20)
         plt.colorbar(plot_8)
     
-        ax = plt.subplot(4,3,9)
+        ax = plt.subplot(4,3,6)
         ax.set_title('E_z_resistive')
         plot_9 = ax.contourf(R, Z, E_z_resistive_contour, 20)
         plt.colorbar(plot_9)
         
-        ax = plt.subplot(4,3,10)
+        ax = plt.subplot(4,3,7)
         ax.set_title('E_r_hall')
         plot_10 = ax.contourf(R, Z, E_r_hall_contour, 20)
         plt.colorbar(plot_10)
         
-        ax = plt.subplot(4,3,11)
+        ax = plt.subplot(4,3,8)
         ax.set_title('E_theta_hall')
         plot_11 = ax.contourf(R, Z, E_theta_hall_contour, 20)
         plt.colorbar(plot_11)
     
-        ax = plt.subplot(4,3,12)
+        ax = plt.subplot(4,3,9)
         ax.set_title('E_z_hall')
         plot_12 = ax.contourf(R, Z, E_z_hall_contour, 20)
         plt.colorbar(plot_12)
+        
+        ax = plt.subplot(4,3,10)
+        ax.set_title('E_r_pressure')
+        plot_13 = ax.contourf(R, Z, E_r_pressure_contour, 20)
+        plt.colorbar(plot_13)
+        
+        ax = plt.subplot(4,3,11)
+        ax.set_title('E_theta_pressure')
+        plot_14 = ax.contourf(R, Z, E_theta_pressure_contour, 20)
+        plt.colorbar(plot_14)
+    
+        ax = plt.subplot(4,3,12)
+        ax.set_title('E_z_pressure')
+        plot_15 = ax.contourf(R, Z, E_z_pressure_contour, 20)
+        plt.colorbar(plot_15)
 
         plt.show()
         
         # 2D quiver plots of J and E
-        d_vec = 15
-        ax = plt.subplot(2,2,1)
+        d_vec = 10
+        
+        ax = plt.subplot(3,2,1)
         ax.set_title('J')
         ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
                    J_r_contour[::d_vec, ::d_vec], J_z_contour[::d_vec, ::d_vec], 
                    pivot='mid', width=0.002, scale=20)
 
-        ax = plt.subplot(2,2,2)
+        ax = plt.subplot(3,2,3)
         ax.set_title('E_ideal')
         ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
                    E_r_ideal_contour[::d_vec, ::d_vec], E_z_ideal_contour[::d_vec, ::d_vec], 
                    pivot='mid', width=0.002, scale=0.5)
     
-        ax = plt.subplot(2,2,3)
+        ax = plt.subplot(3,2,4)
         ax.set_title('E_resistive')
         ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
                    E_r_resistive_contour[::d_vec, ::d_vec], E_z_resistive_contour[::d_vec, ::d_vec], 
                    pivot='mid', width=0.002, scale=2)
     
-        ax = plt.subplot(2,2,4)
+        ax = plt.subplot(3,2,5)
         ax.set_title('E_hall')
         ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
                    E_r_hall_contour[::d_vec, ::d_vec], E_z_hall_contour[::d_vec, ::d_vec], 
                    pivot='mid', width=0.002, scale=2)
+                   
+        ax = plt.subplot(3,2,6)
+        ax.set_title('E_pressure')
+        ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
+                   E_r_pressure_contour[::d_vec, ::d_vec], E_z_pressure_contour[::d_vec, ::d_vec], 
+                   pivot='mid', width=0.002, scale=0.5)
         
         plt.show()
         
         # Total electric field
         ax = plt.subplot(2, 2, 1)
         ax.set_title('E_r_total')
-        plot_1 = ax.contourf(R, Z, E_r_ideal_contour + E_r_resistive_contour + E_r_hall_contour, 20, cmap='plasma')
+        plot_1 = ax.contourf(R, Z, E_r_ideal_contour + E_r_resistive_contour + E_r_hall_contour + E_r_pressure_contour, 20, cmap='plasma')
         plt.colorbar(plot_1)
         
         ax = plt.subplot(2, 2, 2)
         ax.set_title('E_theta_total')
-        plot_2 = ax.contourf(R, Z, E_theta_ideal_contour + E_theta_resistive_contour + E_theta_hall_contour, 20, cmap='plasma')
+        plot_2 = ax.contourf(R, Z, E_theta_ideal_contour + E_theta_resistive_contour + E_theta_hall_contour + E_theta_pressure_contour, 20, cmap='plasma')
         plt.colorbar(plot_2)
         
         ax = plt.subplot(2, 2, 3)
         ax.set_title('E_z_total')
-        plot_3 = ax.contourf(R, Z, E_z_ideal_contour + E_z_resistive_contour + E_z_hall_contour, 20, cmap='plasma')
+        plot_3 = ax.contourf(R, Z, E_z_ideal_contour + E_z_resistive_contour + E_z_hall_contour + E_z_pressure_contour, 20, cmap='plasma')
         plt.colorbar(plot_3)
         
         ax = plt.subplot(2, 2, 4)
         ax.set_title('E_total')
         ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
-                   E_r_ideal_contour[::d_vec, ::d_vec] + E_r_resistive_contour[::d_vec, ::d_vec] + E_r_hall_contour[::d_vec, ::d_vec], 
-                   E_z_ideal_contour[::d_vec, ::d_vec] + E_z_resistive_contour[::d_vec, ::d_vec] + E_z_hall_contour[::d_vec, ::d_vec], 
+                   E_r_ideal_contour[::d_vec, ::d_vec] + E_r_resistive_contour[::d_vec, ::d_vec] + E_r_hall_contour[::d_vec, ::d_vec] + E_r_pressure_contour[::d_vec, ::d_vec], 
+                   E_z_ideal_contour[::d_vec, ::d_vec] + E_z_resistive_contour[::d_vec, ::d_vec] + E_z_hall_contour[::d_vec, ::d_vec] + E_z_pressure_contour[::d_vec, ::d_vec], 
                    pivot='mid', width=0.002, scale=2)
         
         plt.show()
