@@ -63,29 +63,14 @@ class MHDEquilibrium:
         rhs = -(self.sys.fd.ddr(1) @ self.p)
         
         # set boundary conditions
-        if self.sys.grid.N_ghost == 1:
-            rhs[0] = 0
-            rhs[-1] = 0
-            lhs[0, 0] = 1
-            lhs[0, 1] = 1
-            lhs[-1, -1] = -self.sys.grid.r[-1] / self.sys.grid.r[-2]
-            lhs[-1, -2] = 1
-        elif self.sys.grid.N_ghost == 2:
-            rhs[0] = 0
-            rhs[1] = 0
-            rhs[-2] = 0
-            rhs[-1] = 0
-            lhs[1, 1] = 1
-            lhs[1, 2] = 1
-            lhs[0, 0] = 1
-            lhs[0, 2] = 3
-            lhs[-2, -1] = -self.sys.grid.r[-1] / self.sys.grid.r[-2]
-            lhs[-2, -2] = 1
-            lhs[-1, -2] = -self.sys.grid.r[-2] / self.sys.grid.r[-3]
-            lhs[-1, -3] = 1
+        rhs[0] = 0
+        rhs[-1] = 0
+        lhs[0, 0] = 1
+        lhs[0, 1] = 1
+        lhs[-1, -1] = -self.sys.grid.r[-1] / self.sys.grid.r[-2]
+        lhs[-1, -2] = 1
 
         # b_squared = np.linalg.solve(lhs, rhs)
-        # b_squared = np.sqrt(np.pi) / self.sys.grid.rr**2 * erf(self.sys.grid.rr**2) - 2 * np.exp(-self.sys.grid.rr**4)
         b_squared = (4 / (self.p_exp * self.sys.grid.rr**2) * gamma(2 / self.p_exp) * gammainc(2 / self.p_exp, self.sys.grid.rr**self.p_exp) 
                     - 2 * np.exp(-self.sys.grid.rr**self.p_exp))
         b = np.sqrt(4 * np.pi) * np.sign(b_squared) * np.sqrt(np.abs(b_squared))
@@ -107,35 +92,17 @@ class FDSystem:
 
     def ddr(self, order):
         one = np.ones(self.grid.N - 1)
-        if self.grid.N_ghost == 1:
-            if order == 1:
-                dv = (np.diag(one, 1) - np.diag(one, -1)) / (2 * self.grid.dr)
-            elif order == 2:
-                dv = (dia_matrix((one, 1), shape=(self.grid.N, self.grid.N)).toarray() 
-                      - 2 * np.identity(self.grid.N) + dia_matrix((one, -1), shape=(self.grid.N, self.grid.N)).toarray()) / self.grid.dr**2  
-                        
-        elif self.grid.N_ghost == 2:
-            if order == 1:
-                dv = (- 1/12 * dia_matrix((one, +2), shape=(self.grid.N, self.grid.N)) 
-                      + 2/3  * dia_matrix((one, +1), shape=(self.grid.N, self.grid.N)) 
-                      - 2/3  * dia_matrix((one, -1), shape=(self.grid.N, self.grid.N)) 
-                      + 1/12 * dia_matrix((one, -2), shape=(self.grid.N, self.grid.N))).toarray() / self.grid.dr
-            elif order == 2:
-                dv = (- 1/12 * dia_matrix((one, +2), shape=(self.grid.N, self.grid.N))
-                      + 4/3  * dia_matrix((one, +1), shape=(self.grid.N, self.grid.N))
-                      - 5/2  * dia_matrix((one, +0), shape=(self.grid.N, self.grid.N))
-                      + 4/3  * dia_matrix((one, -1), shape=(self.grid.N, self.grid.N))
-                      - 1/12 * dia_matrix((one, -2), shape=(self.grid.N, self.grid.N))).toarray() / self.grid.dr**2
-                      
+        if order == 1:
+            dv = (np.diag(one, 1) - np.diag(one, -1)) / (2 * self.grid.dr)
+        elif order == 2:
+            dv = (dia_matrix((one, 1), shape=(self.grid.N, self.grid.N)).toarray() 
+                  - 2 * np.identity(self.grid.N) + dia_matrix((one, -1), shape=(self.grid.N, self.grid.N)).toarray()) / self.grid.dr**2  
+      
         dv = self.zero_bc(dv)
         return dv
 
     def ddr_product(self, vec):
-        if self.grid.N_ghost == 1:
-            dv = (np.diagflat(vec[1: ], 1) - np.diagflat(vec[: -1], -1)) / (2 * self.grid.dr)
-        elif self.grid.N_ghost == 2:
-            dv = (-1/12 * np.diagflat(vec[2: ], 2) + 2/3 * np.diagflat(vec[1: ], 1) 
-                  - 2/3 * np.diagflat(vec[: -1], -1) + 1/12 * np.diagflat(vec[: -2], -2)) / self.grid.dr
+        dv = (np.diagflat(vec[1: ], 1) - np.diagflat(vec[: -1], -1)) / (2 * self.grid.dr)
         dv = self.zero_bc(dv)
         return dv
 
@@ -154,10 +121,6 @@ class FDSystem:
         M = M_0.copy()
         M[0, :] = 0
         M[-1, :] = 0
-        
-        if self.grid.N_ghost == 2:
-            M[1, :] = 0
-            M[-2, :] = 0
             
         return M
 
@@ -179,6 +142,72 @@ class FDSystem:
         M[-1] = row
         return M
 
+
+class MHDEvolution:
+    def __init__(self, equilibrium, t_max):
+        self.equilibrium = equilibrium
+        self.t_max = t_max
+        
+    def evolve(self, B_scale=1):
+        r = self.equilibrium.sys.grid.r
+        rr = self.equilibrium.sys.grid.rr
+        nr = self.equilibrium.sys.grid.N
+        dr = self.equilibrium.sys.grid.dr
+        rho = self.equilibrium.rho
+        B = B_scale * self.equilibrium.B
+        p = self.equilibrium.p
+        t_max = self.t_max
+        
+        # ideal for now
+        D_eta = 0
+        
+        t = 0
+        Vr = np.reshape(np.zeros(nr), (nr, 1))
+  
+        while t < t_max:
+            rho_temp = rho.copy()
+            B_temp = B.copy()
+            Vr_temp = Vr.copy()  
+            p_temp = p.copy()
+            T = p_temp / (2 * rho_temp)     
+    
+            # Courant condition
+            v_fluid = max(Vr)
+            v_alfven2 = max(B**2 / (4 * np.pi * np.abs(rho)))
+            v_sound2 = max(2 * T)
+            v_magnetosonic = np.sqrt(v_alfven2 + v_sound2)
+            v_courant = v_fluid + v_magnetosonic
+        
+            dt = dr / v_courant * 0.2
+            t = t + dt
+            print(v_courant, t)
+                
+            # Finite difference procedure
+            rho[1: -1] = rho_temp[1: -1] - dt / (rr[1: -1] * 2 * dr) * (rr[2: ] * rho_temp[2: ] * Vr_temp[2: ] - rr[: -2] * rho_temp[: -2] * Vr_temp[: -2])
+            B[1: -1] = (B_temp[1: -1] - dt / (2 * dr) * (Vr_temp[2: ] * B_temp[2: ] - Vr_temp[: -2] * B_temp[: -2]) 
+                    + dt * D_eta * ((B_temp[2: ] - 2 * B_temp[1: -1] + B_temp[: -2]) / dr**2 + (B_temp[2: ] - B_temp[: -2]) / (rr[1: -1] * 2 * dr) - B_temp[1: -1] / rr[1: -1]**2))
+            Vr[1: -1] = (Vr_temp[1: -1] - dt / (rho_temp[1: -1] * 2 * dr) * (p_temp[2: ] - p_temp[: -2]) 
+                     - B_temp[1: -1] * dt / (4 * np.pi * rho_temp[1: -1] * rr[1: -1] * 2 * dr) * (rr[2: ] * B_temp[2: ] - rr[: -2] * B_temp[: -2]))
+            p[1: -1] = (p_temp[1: -1] - dt / (2 * dr) * Vr_temp[1: -1] * (p_temp[2: ] - p_temp[: -2]) 
+                       - 3 * dt / (2 * dr) * p_temp[1: -1] / rr[1: -1] * (rr[2: ] * Vr_temp[2: ] - rr[: -2] * Vr_temp[: -2]))
+            
+            # Boundary conditions
+            rho[0] = rho[1]
+            rho[-1] = rho[-2]
+            B[0] = -B[1]
+            B[-1] = rr[-2] * B[-2] / rr[-1]
+            Vr[0] = -Vr[1]
+            Vr[-1] = -Vr[-2]
+            p[0] = p[1]
+            p[-1] = p[-2]
+            T[0] = T[1]
+            T[-1] = T[-2]
+    
+        plt.plot(r[1: -1], B[1: -1], r[1: -1], rho[1: -1], r[1: -1], Vr[1: -1], r[1: -1], p[1: -1], r[1: -1], T[1: -1])
+        plt.legend(['B', 'rho', 'V_r', 'p', 'T'])
+        plt.xlabel('r')
+        plt.title('Time evolution')
+        plt.show()             
 
 class LinearizedMHD:
     def __init__(self, equilibrium, k=1, m=0):
@@ -211,6 +240,9 @@ class LinearizedMHD:
         D_H = self.equilibrium.sys.D_H
         D_P = self.equilibrium.sys.D_P
         B_Z0 = self.equilibrium.sys.B_Z0
+        
+        # Ratio of specific heats 
+        ratio = 3
 
         # Ideal MHD
         m_rho_Vr = -1j * fd.ddr_product(rr * rho) / rr
@@ -241,8 +273,8 @@ class LinearizedMHD:
         m_Vz_Btheta = fd.diag(k * B / (4 * np.pi * rho))
         m_Vz_Bz = fd.diag(-m * B / (4 * np.pi * rho * rr))
         
-        m_p_Vr = fd.diag(-1j * (fd.ddr(1) @ p)) - 2 * 1j * p / rr * fd.ddr_product(rr)
-        m_p_Vz = fd.diag(2 * p * k)
+        m_p_Vr = fd.diag(-1j * (fd.ddr(1) @ p)) - ratio * 1j * p / rr * fd.ddr_product(rr)
+        m_p_Vz = fd.diag(ratio * p * k)
        
         m0 = fd.zeros()
         m_rho_rho = fd.zeros()
