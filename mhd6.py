@@ -1,17 +1,17 @@
-from mhd5solverv2 import MHDSystem, MHDEquilibrium, LinearizedMHD, MHDEvolution
+from mhd6solver import MHDSystem, MHDEquilibrium, LinearizedMHD, MHDEvolution
 import numpy as np
 import matplotlib.pyplot as plt
 
-sys = MHDSystem(N_r=128, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
+sys = MHDSystem(N_r=400, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
 equ = MHDEquilibrium(sys, p_exp=4)
-# lin = LinearizedMHD(equ, k=1, m=0)
+# lin = LinearizedMHD(equ, k=4, m=0)
 # 
 # lin.solve(num_modes=1)
-# # lin.plot_eigenvalues()
+# lin.plot_eigenvalues()
 # lin.plot_VB(-1, epsilon=0.05)
 # lin.plot_EJ(-1, epsilon=0.05)
 
-nonlin = MHDEvolution(equ, t_max=0.5)
+nonlin = MHDEvolution(equ, t_max=0.2)
 nonlin.evolve(k=1)
 
 def find_nearest(array, value): return (np.abs(array - value)).argmin()
@@ -21,7 +21,7 @@ def find_nearest(array, value): return (np.abs(array - value)).argmin()
 # print(g[i])
 # plt.plot(sys.grid.r[1:-1], equ.p[1:-1], sys.grid.r[1:-1], equ.B[1:-1], sys.grid.r[1:-1], equ.J[1:-1])
 # plt.title('Equilibrium configuration')
-# plt.xlabel('r/r0')
+# plt.xlabel('x/x0')
 # plt.legend(['P', 'B', 'J'])
 # plt.show()
 
@@ -67,19 +67,18 @@ def find_nearest(array, value): return (np.abs(array - value)).argmin()
 
 
 ## gamma vs. k
-## Need to increase resolution to find gammas for very low k.
 # k_vals = np.reshape(np.linspace(0.01, 0.2, 20), (20, 1))
 # gammas = []
 # 
 # sys = MHDSystem(N_r=400, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-# equ = MHDEquilibrium(sys, p_exp=12)
+# equ = MHDEquilibrium(sys, p_exp=4)
 # lin = LinearizedMHD(equ, k=1, m=0)
 # for k in k_vals:
 #     print(k)
 #     lin.set_z_mode(k, m=0)
 #     gammas.append(lin.solve_for_gamma())
 # 
-# plt.plot(k_vals, gammas, k_vals, g[i] * k_vals)
+# plt.plot(k_vals, gammas, k_vals, 1 * k_vals)
 # plt.title('Fastest growing mode')
 # plt.xlabel('k')
 # plt.ylabel('gamma')

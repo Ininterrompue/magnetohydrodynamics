@@ -148,40 +148,48 @@ class MHDEvolution:
         self.equilibrium = equilibrium
         self.t_max = t_max
         
-    def evolve(self, B_scale=1):
+    def evolve(self, k=1):
+        nr = self.equilibrium.sys.grid.N
         r = self.equilibrium.sys.grid.r
-        rr = self.equilibrium.sys.grid.rr
+        rr = self.equilibrium.sys.grid.rr * np.ones(nr).T
         z = self.equilibrium.sys.grid.r
         zz = self.equilibrium.sys.grid.rr
-        nr = self.equilibrium.sys.grid.N
+
         dr = self.equilibrium.sys.grid.dr
-        rho = self.equilibrium.rho
-        B = B_scale * self.equilibrium.B
-        p = self.equilibrium.p
-        t_max = self.t_max
+
+        pert = 1 - 0.01 * np.cos(k * zz)
         
+        rho = self.equilibrium.rho * pert.T
+        B = self.equilibrium.B * np.ones(nr).T
+        p = self.equilibrium.p * pert.T
+        t_max = self.t_max
+
         # ideal for now
         D_eta = 0
+        ratio = 2
         
         t = 0
         iteration = 0
+        counter = 0
         Vr = np.zeros((nr, nr))
-        print(Vr)
-  
+        Vz = np.zeros((nr, nr))
+        T = np.ones((nr, nr))
+
         while t < t_max:
             iteration += 1
+            counter += 1
             rho_temp = rho.copy()
             B_temp = B.copy()
             Vr_temp = Vr.copy()  
+            Vz_temp = Vz.copy()
             p_temp = p.copy()
-            T = p_temp / (2 * rho_temp)     
     
             # Courant condition
-            v_fluid = max(np.abs(Vr))
-            v_alfven2 = max(np.abs(B)**2 / (4 * np.pi * np.abs(rho)))
-            v_sound2 = max(2 * np.abs(T))
-            v_magnetosonic = np.sqrt(v_alfven2 + v_sound2)
-            v_courant = v_fluid + v_magnetosonic
+            v_fluid = np.amax(np.abs(Vr))
+            v_alfven2 = np.amax(np.abs(B)**2 / (4 * np.pi * np.abs(rho)))
+            v_sound2 = np.amax(2 * np.abs(T))
+            v_magnetosonic = v_alfven2 + v_sound2
+            v_courant = v_fluid + v_magnetosonic + 20
         
             dt = dr / v_courant * 0.1
             if dt < 1e-7:
@@ -189,41 +197,113 @@ class MHDEvolution:
                 break
                 
             t += dt
-            print(iteration, v_courant, t)
+            if counter == 200:
+                print(iteration, v_courant, t)
+                counter = 0
                 
-            # Finite difference procedure
-#             rho[1: -1] = rho_temp[1: -1] - dt / (rr[1: -1] * 2 * dr) * (rr[2: ] * rho_temp[2: ] * Vr_temp[2: ] - rr[: -2] * rho_temp[: -2] * Vr_temp[: -2])
-#             B[1: -1] = (B_temp[1: -1] - dt / (2 * dr) * (Vr_temp[2: ] * B_temp[2: ] - Vr_temp[: -2] * B_temp[: -2]) 
-#                     + dt * D_eta * ((B_temp[2: ] - 2 * B_temp[1: -1] + B_temp[: -2]) / dr**2 + (B_temp[2: ] - B_temp[: -2]) / (rr[1: -1] * 2 * dr) - B_temp[1: -1] / rr[1: -1]**2))
-#             Vr[1: -1] = (Vr_temp[1: -1] - dt / (2 * dr) * Vr_temp[1: -1] * (Vr_temp[2: ] - Vr_temp[: -2]) - dt / (rho_temp[1: -1] * 2 * dr) * (p_temp[2: ] - p_temp[: -2]) 
-#                      - B_temp[1: -1] * dt / (4 * np.pi * rho_temp[1: -1] * rr[1: -1] * 2 * dr) * (rr[2: ] * B_temp[2: ] - rr[: -2] * B_temp[: -2]))
-#             p[1: -1] = (p_temp[1: -1] - dt / (2 * dr) * Vr_temp[1: -1] * (p_temp[2: ] - p_temp[: -2]) 
-#                        - 3 * dt / (2 * dr) * p_temp[1: -1] / rr[1: -1] * (rr[2: ] * Vr_temp[2: ] - rr[: -2] * Vr_temp[: -2]))
-                       
-            rho[1: -1] = rho_temp[1: -1] - dt / (rr[1: -1] * 2 * dr) * (rr[2: ] * rho_temp[2: ] * Vr_temp[2: ] - rr[: -2] * rho_temp[: -2] * Vr_temp[: -2])
-            B[1: -1] = B_temp[1: -1] - dt / (2 * dr) * (Vr_temp[2: ] * B_temp[2: ] - Vr_temp[: -2] * B_temp[: -2])
-            Vr[1: -1] = (Vr_temp[1: -1] - dt / (2 * dr) * Vr_temp[1: -1] * (Vr_temp[2: ] - Vr_temp[: -2]) - dt / (rho_temp[1: -1] * 2 * dr) * (p_temp[2: ] - p_temp[: -2]) 
-                     - B_temp[1: -1] * dt / (4 * np.pi * rho_temp[1: -1] * rr[1: -1] * 2 * dr) * (rr[2: ] * B_temp[2: ] - rr[: -2] * B_temp[: -2]))
-            p[1: -1] = (p_temp[1: -1] - dt / (2 * dr) * Vr_temp[1: -1] * (p_temp[2: ] - p_temp[: -2]) 
-                       - 3 * dt / (2 * dr) * p_temp[1: -1] / rr[1: -1] * (rr[2: ] * Vr_temp[2: ] - rr[: -2] * Vr_temp[: -2]))
+            # Finite difference procedure                      
+            rho[1: -1, 1: -1] = (rho_temp[1: -1, 1: -1] 
+                                 - dt / (2 * dr * rr[1: -1, 1: -1]) * (rr[2: , 1: -1] * rho_temp[2: , 1: -1] * Vr_temp[2: , 1: -1] 
+                                                                       - rr[: -2, 1: -1] * rho_temp[: -2, 1: -1] * Vr_temp[: -2, 1: -1])
+                                                                       - dt / (2 * dr) * (rho_temp[1: -1, 2: ] * Vz_temp[1: -1, 2: ]
+                                                                       - rho_temp[1: -1, : -2] * Vz_temp[1: -1, : -2]))
+            B[1: -1, 1: -1] = (B_temp[1: -1, 1: -1] - dt / (2 * dr) * (Vr_temp[2: , 1: -1] * B_temp[2: , 1: -1] - Vr_temp[: -2, 1: -1] * B_temp[: -2, 1: -1])
+                                                    - dt / (2 * dr) * (Vz_temp[1: -1, 2: ] * B_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2] * B_temp[1: -1, : -2]))
+                                                    
+            Vr[1: -1, 1: -1] = (Vr_temp[1: -1, 1: -1] - dt / (2 * dr) * Vr_temp[1: -1, 1: -1] * (Vr_temp[2: , 1: -1] - Vr_temp[: -2, 1: -1])
+                                                      - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (Vr_temp[1: -1, 2: ] - Vr_temp[1: -1, : -2]) 
+                                                      - dt / (2 * dr * rho_temp[1: -1, 1: -1]) * (p_temp[2: , 1: -1] - p_temp[: -2, 1: -1]) 
+                                                      - B_temp[1: -1, 1: -1] * dt / (4 * np.pi * rho_temp[1: -1, 1: -1] * rr[1: -1, 1: -1] * 2 * dr) 
+                                                      * (rr[2: , 1: -1] * B_temp[2: , 1: -1] - rr[: -2, 1: -1] * B_temp[: -2, 1: -1]))
+                                                      
+            Vz[1: -1, 1: -1] = (Vz_temp[1: -1, 1: -1] - dt / (2 * dr) * Vr_temp[1: -1, 1: -1] * (Vz_temp[2: , 1: -1] - Vz_temp[: -2, 1: -1])
+                                                      - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (Vz_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2])
+                                                      - dt / (2 * dr * rho_temp[1: -1, 1: -1]) * (p_temp[1: -1, 2: ] - p_temp[1: -1, : -2])
+                                                      - B_temp[1: -1, 1: -1] * dt / (4 * np.pi * rho_temp[1: -1, 1: -1] * 2 * dr) * (B_temp[1: -1, 2: ] - B_temp[1: -1, : -2]))
+                                         
+            p[1: -1, 1: -1] = (p_temp[1: -1, 1: -1] - dt / (2 * dr) * Vr_temp[1: -1, 1: -1] * (p_temp[2: , 1: -1] - p_temp[: -2, 1: -1]) 
+                                                    - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (p_temp[1: -1, 2: ] - p_temp[1: -1, : -2])
+                               - ratio * dt / (2 * dr) * p_temp[1: -1, 1: -1] / rr[1: -1, 1: -1] * (rr[2: , 1: -1] * Vr_temp[2: , 1: -1] - rr[: -2, 1: -1] * Vr_temp[: -2, 1: -1])
+                               - ratio * dt / (2 * dr) * p_temp[1: -1, 1: -1] * (Vz_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2]))
+            T[1: -1, 1: -1] = p[1: -1, 1: -1] / (2 * rho[1: -1, 1: -1])
             
             # Boundary conditions
-            rho[0] = rho[1]
-            rho[-1] = rho[-2]
-            B[0] = -B[1]
-            B[-1] = rr[-2] * B[-2] / rr[-1]
-            Vr[0] = -Vr[1]
-            Vr[-1] = -Vr[-2]
-            p[0] = p[1]
-            p[-1] = p[-2]
-            T[0] = T[1]
-            T[-1] = T[-2]
+            rho[0, :] = rho[1, :]
+            rho[-1, :] = rho[-2, :]
+            rho[: , 0] = rho[: , -2] 
+            rho[: , -1] = rho[: , 1]
+            B[0, :] = -B[1, :]
+            B[-1, :] = rr[-2, :] * B[-2, :] / rr[-1, :]
+            B[: , 0] = B[: , -2]
+            B[: , -1] = B[: , 1]
+            Vr[0, :] = -Vr[1, :]
+            Vr[-1, :] = -Vr[-2, :]
+            Vr[:, 0] = Vr[:, -2]
+            Vr[:, -1] = Vr[:, 1]
+            Vz[0, :] = Vz[1, :]
+            Vz[-1, :] = -Vz[-2, :]
+            Vz[:, 0] = Vz[:, -2]
+            Vz[:, -1] = Vz[:, 1]
+            p[0, :] = p[1, :]
+            p[-1, :] = p[-2, :]
+            p[:, 0] = p[:, -2]
+            p[:, -1] = p[:, 1]
+            T[0, :] = T[1, :]
+            T[-1, :] = T[-2, :]
+            T[:, 0] = T[:, -2]
+            T[:, -1] = T[:, 1]
     
-        plt.plot(r[1: -1], B[1: -1], r[1: -1], rho[1: -1], r[1: -1], Vr[1: -1], r[1: -1], p[1: -1], r[1: -1], T[1: -1])
+        plt.plot(r[1: -1], B[1: -1, 1], r[1: -1], rho[1: -1, 1], r[1: -1], Vr[1: -1, 1], r[1: -1], p[1: -1, 1], r[1: -1], T[1: -1, 1])
         plt.legend(['B', 'rho', 'V_r', 'p', 'T'])
         plt.xlabel('r')
         plt.title('Time evolution')
-        plt.show()             
+        plt.show()
+        
+        plt.plot(r[1: -1], B[1, 1: -1], r[1: -1], rho[1, 1: -1], r[1: -1], Vr[1, 1: -1], r[1: -1], Vz[1, 1: -1], r[1: -1], p[1, 1: -1], r[1: -1], T[1, 1: -1])
+        plt.legend(['B', 'rho', 'V_r', 'V_z', 'p', 'T'])
+        plt.xlabel('z')
+        plt.title('r = 1 lineout')
+        plt.show()
+        
+        R, Z = np.meshgrid(r[1: -1], z[1: -1]) 
+        
+        ax = plt.subplot(2,3,1)
+        ax.set_title('rho')
+        plot_1 = ax.contourf(R, Z, rho[1: -1, 1: -1], 20, cmap='plasma')
+        plt.colorbar(plot_1)
+    
+        ax = plt.subplot(2,3,2)
+        ax.set_title('p')
+        plot_2 = ax.contourf(R, Z, p[1: -1, 1: -1], 20, cmap='plasma')
+        plt.colorbar(plot_2)
+    
+        ax = plt.subplot(2,3,3)
+        ax.set_title('T')
+        plot_3 = ax.contourf(R, Z, T[1: -1, 1: -1], 20, cmap='plasma')
+        plt.colorbar(plot_3)
+    
+        ax = plt.subplot(2,3,4)
+        ax.set_title('B_theta')
+        plot_4 = ax.contourf(R, Z, B[1: -1, 1: -1], 20, cmap='plasma')
+        plt.colorbar(plot_4)
+        
+        ax = plt.subplot(2,3,5)
+        ax.set_title('V_r')
+        plot_5 = ax.contourf(R, Z, Vr[1: -1, 1: -1], 20, cmap='plasma')
+        plt.colorbar(plot_5)
+    
+        ax = plt.subplot(2,3,6)
+        ax.set_title('V_z')
+        plot_6 = ax.contourf(R, Z, Vz[1: -1, 1: -1], 20, cmap='plasma')
+        plt.colorbar(plot_6)     
+        
+        plt.show()    
+        
+        d_vec=5
+        plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
+                   -Vz[::d_vec, ::d_vec], -Vr[::d_vec, ::d_vec], 
+                   pivot='mid', width=0.002, scale=1)
+        plt.show()   
 
 class LinearizedMHD:
     def __init__(self, equilibrium, k=1, m=0):
