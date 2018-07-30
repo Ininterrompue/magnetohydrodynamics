@@ -7,8 +7,35 @@ from scipy.sparse import dia_matrix
 from scipy.sparse.linalg import eigs
 import matplotlib.pyplot as plt
 
-global c
-c = 1
+class Const:
+    # c = cm/ns
+#     c   = 30
+#     
+#     # m_i = g
+#     m_i = 1.67e-24
+#     
+#     # I = 1 MA in Gaussian units
+#     I   = 3e6
+#     
+#     # T_0 = 10000 K
+#     T_0 = 1e4 * 1.38e-16
+#     
+#     # r_0 = 1 cm
+#     r_0 = 1
+
+    c   = 30
+    m_i = 1e6
+    I   = 1e6
+    T_0 = 1e4 * 8.62e-5
+    r_0 = 1
+
+    # Normalized constants
+#     c   = 1
+#     m_i = 1
+#     I   = np.sqrt(np.pi)
+#     T_0 = 1
+#     r_0 = 1
+
 
 class MHDSystem:
     def __init__(self, N_r=50, N_ghost=1, r_max=2*np.pi, m=0, D_eta=0, D_H=0, D_P=0, B_Z0=0):
@@ -49,30 +76,33 @@ class MHDEquilibrium:
         self.J = self.compute_j_from_b()
 
     def compute_p(self):
-        return 0.05 + np.exp(-(self.sys.grid.rr)**self.p_exp)
+        return Const.I**2 / (np.pi * Const.r_0**2 * Const.c**2) * (0.05 + np.exp(-(self.sys.grid.rr / Const.r_0)**self.p_exp))
         
     def compute_rho_from_p(self):
-        # Equation of state. Initial conditions: T = 1 uniform.
-        rho = self.p / 2
+        # Equation of state. Initial conditions: T uniform
+        rho = Const.m_i * self.p / (2 * Const.T_0)
         return rho
 
     def compute_b_from_p(self):
         # solve equilibrium ideal MHD equation
         #   (d/dr)(P + 0.5*B^2) + B^2/r = 0
-        lhs = 1/2 * self.sys.fd.ddr(1) + self.sys.fd.diag(1 / self.sys.grid.r)
-        rhs = -(self.sys.fd.ddr(1) @ self.p)
-        
-        # set boundary conditions
-        rhs[0] = 0
-        rhs[-1] = 0
-        lhs[0, 0] = 1
-        lhs[0, 1] = 1
-        lhs[-1, -1] = -self.sys.grid.r[-1] / self.sys.grid.r[-2]
-        lhs[-1, -2] = 1
+#         lhs = 1/2 * self.sys.fd.ddr(1) + self.sys.fd.diag(1 / self.sys.grid.r)
+#         rhs = -(self.sys.fd.ddr(1) @ self.p)
+#         
+#         # set boundary conditions
+#         rhs[0] = 0
+#         rhs[-1] = 0
+#         lhs[0, 0] = 1
+#         lhs[0, 1] = 1
+#         lhs[-1, -1] = -self.sys.grid.r[-1] / self.sys.grid.r[-2]
+#         lhs[-1, -2] = 1
 
         # b_squared = np.linalg.solve(lhs, rhs)
-        b_squared = (4 / (self.p_exp * self.sys.grid.rr**2) * gamma(2 / self.p_exp) * gammainc(2 / self.p_exp, self.sys.grid.rr**self.p_exp) 
-                    - 2 * np.exp(-self.sys.grid.rr**self.p_exp))
+        
+        # b_squared is the magnetic pressure B^2 / 8*pi
+        b_squared = (Const.I**2 / (np.pi * Const.r_0**2 * Const.c**2) 
+                     * (4 / (self.p_exp * self.sys.grid.rr**2) * gamma(2 / self.p_exp) * gammainc(2 / self.p_exp, self.sys.grid.rr**self.p_exp) 
+                     - 2 * np.exp(-self.sys.grid.rr**self.p_exp)))
         b = np.sqrt(4 * np.pi) * np.sign(b_squared) * np.sqrt(np.abs(b_squared))
         # boundary condition to ensure no NaNs
         b[0] = b[1]
@@ -80,7 +110,7 @@ class MHDEquilibrium:
 
     def compute_j_from_b(self):
         dv = self.sys.fd.ddr_product(self.sys.grid.rr)
-        J = 1 / self.sys.grid.rr * (dv @ self.B) * c / (4 * np.pi)
+        J = 1 / self.sys.grid.rr * (dv @ self.B) * Const.c / (4 * np.pi)
         return J
 
 
@@ -173,7 +203,7 @@ class MHDEvolution:
         counter = 0
         Vr = np.zeros((nr, nr))
         Vz = np.zeros((nr, nr))
-        T = np.ones((nr, nr))
+        T = Const.T_0 * np.ones((nr, nr))
 
         while t < t_max:
             iteration += 1
@@ -185,19 +215,19 @@ class MHDEvolution:
             p_temp = p.copy()
     
             # Courant condition
-            v_fluid = np.amax(np.abs(Vr))
+            v_fluid = np.amax(np.abs(Vr)) + np.amax(np.abs(Vz))
             v_alfven2 = np.amax(np.abs(B)**2 / (4 * np.pi * np.abs(rho)))
-            v_sound2 = np.amax(2 * np.abs(T))
+            v_sound2 = np.amax(2 * np.abs(T) / Const.m_i)
             v_magnetosonic = v_alfven2 + v_sound2
-            v_courant = 30 * (v_fluid + v_magnetosonic)
+            v_courant = v_fluid + v_magnetosonic
         
-            dt = dr / v_courant * 0.05
-            if dt < 1e-9:
+            dt = dr / v_courant * 0.0005
+            if dt < 1e-6:
                 print('Solution has not converged')
                 break
                 
             t += dt
-            if counter == 1000:
+            if counter == 100:
                 print(iteration, v_courant, t)
                 counter = 0
                 
@@ -252,6 +282,14 @@ class MHDEvolution:
             T[-1, :] = T[-2, :]
             T[:, 0] = T[:, -2]
             T[:, -1] = T[:, 1]
+            
+        # Normalization
+        rho = rho * 1e-15
+        p = p * 1e-9
+        T = T * 1e6
+        B = B * 1e-5
+        Vr = Vr * 1e3
+        Vz = Vz * 1e3
     
         plt.plot(r[1: -1], B[1: -1, 1], r[1: -1], rho[1: -1, 1], r[1: -1], Vr[1: -1, 1], r[1: -1], p[1: -1, 1], r[1: -1], T[1: -1, 1])
         plt.legend(['B', 'rho', 'V_r', 'p', 'T'])
@@ -441,7 +479,7 @@ class LinearizedMHD:
     def solve(self, num_modes=None):
         if num_modes:
             self.evals, self.evects = eigs(self.fd_operator, k=num_modes, M=self.fd_rhs,
-                                           sigma=1j, which='LI', return_eigenvectors=True)
+                                           sigma=2j, which='LI', return_eigenvectors=True)
         else:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
 
@@ -677,29 +715,29 @@ class LinearizedMHD:
         d_rB_dr = fd.ddr(1) @ (rr * B_theta)
         d_Bz_dr = fd.ddr(1) @ B_z    
         
-        J_r = 1 / (4 * np.pi) * -1j * self.k * B_1
-        J_theta = 1 / (4 * np.pi) * (1j * self.k * B_r - d_Bz_dr)
-        J_z1 = 1 / (4 * np.pi * rr) * (fd.ddr(1) @ (rr * B_1))
+        J_r = Const.c / (4 * np.pi) * -1j * self.k * B_1
+        J_theta = Const.c / (4 * np.pi) * (1j * self.k * B_r - d_Bz_dr)
+        J_z1 = Const.c / (4 * np.pi * rr) * (fd.ddr(1) @ (rr * B_1))
         J_z = J_0 + J_z1
         
         E_r_ideal = V_z * B_theta - V_theta * B_z
         E_theta_ideal = V_r * B_z - V_z * B_r
         E_z_ideal = V_theta * B_r - V_r * B_theta
         
-        E_r_resistive = 4 * np.pi * D_eta * J_r
-        E_theta_resistive = 4 * np.pi * D_eta * J_theta
-        E_z0_resistive = 4 * np.pi * D_eta * J_0
-        E_z1_resistive = 4 * np.pi * D_eta * J_z1
+        E_r_resistive = 4 * np.pi * D_eta / Const.c**2 * J_r
+        E_theta_resistive = 4 * np.pi * D_eta / Const.c**2 * J_theta
+        E_z0_resistive = 4 * np.pi * D_eta / Const.c**2 * J_0
+        E_z1_resistive = 4 * np.pi * D_eta / Const.c**2 * J_z1
         
-        E_r0_hall = 4 * np.pi * D_H / rho_0 * (-J_0 * B_0)
-        E_r1_hall = 4 * np.pi * D_H / rho * (J_theta * B_z - J_z * B_theta) - 4 * np.pi * D_H / rho_0 * (-J_0 * B_0)
-        E_theta_hall = 4 * np.pi * D_H / rho * (J_z * B_r - J_r * B_z)
-        E_z_hall = 4 * np.pi * D_H / rho * (J_r * B_theta - J_theta * B_r)
+        E_r0_hall = 4 * np.pi * D_H / Const.c**2 / rho_0 * (-J_0 * B_0)
+        E_r1_hall = 4 * np.pi * D_H / Const.c**2 / rho * (J_theta * B_z - J_z * B_theta) - 4 * np.pi * D_H / rho_0 * (-J_0 * B_0)
+        E_theta_hall = 4 * np.pi * D_H / Const.c**2 / rho * (J_z * B_r - J_r * B_z)
+        E_z_hall = 4 * np.pi * D_H / Const.c**2 / rho * (J_r * B_theta - J_theta * B_r)
         
-        E_r0_pressure = -D_P / rho_0 * (fd.ddr(1) @ p_0)
-        E_r1_pressure = -D_P / rho * (fd.ddr(1) @ p) - E_r0_pressure
+        E_r0_pressure = -D_P / Const.c / rho_0 * (fd.ddr(1) @ p_0)
+        E_r1_pressure = -D_P / Const.c / rho * (fd.ddr(1) @ p) - E_r0_pressure
         E_theta_pressure = np.zeros(nr)
-        E_z_pressure = -D_P / rho * 1j * self.k * p_1
+        E_z_pressure = -D_P / Const.c / rho * 1j * self.k * p_1
         
         # 1D perturbations of J and E
         ax = plt.subplot(1,2,1)
