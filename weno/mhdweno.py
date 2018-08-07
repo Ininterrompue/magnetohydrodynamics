@@ -1,22 +1,22 @@
 import numpy as np
-from numpy import apply_along_axis as aaa
+from aaa_source import apply_along_axis as aaa
 from scipy.special import gamma, gammainc
 import matplotlib.pyplot as plt
 import time
 
 class Const:
-    # c   = 30
-    # m_i = 1.04e6
-    # I   = 3e6
-    # T_0 = 1e4 * 8.62e-5
-    # r_0 = 1
+    c   = 30
+    m_i = 1.04e6
+    I   = 3e6
+    T_0 = 1e4 * 8.62e-5
+    r_0 = 1
     
     # Normalized constants
-    c   = 1
-    m_i = 1
-    I   = np.sqrt(np.pi)
-    T_0 = 1
-    r_0 = 1
+#     c   = 1
+#     m_i = 1
+#     I   = np.sqrt(np.pi)
+#     T_0 = 1
+#     r_0 = 1
 
 
 class MHDGrid:
@@ -166,8 +166,9 @@ class MHDEvolution:
         
         t = 0
         cycle = 0
-        counter = 0
+        # counter = 0
 
+        print('Cycle | t | dt')
         t0 = time.time()
         while t < t_max:
             # Primitive variables
@@ -189,15 +190,20 @@ class MHDEvolution:
             else:
                 # Once time-evolved, just copy; no need to compute it again
                 e_temp = e.copy()
-            
+
             # Time step from CFL condition
             self.dt = self.CFL(courant, B_temp, Vr_temp, Vz_temp, rho_temp, T_temp)
+            if self.dt < 1e-7:
+                print('Solution has not converged. Break')
+                break
+                
             t += self.dt
             cycle += 1
-            counter += 1
-            if counter == 10:
-                print(cycle, t)
-                counter = 0
+            # counter += 1
+#             if counter == 10:
+#                 print(cycle, t)
+#                 counter = 0
+            print(cycle, t, self.dt)
 
             # Updates fluxes and source terms of conserved variables
             fluxR_B   = Vr_temp * B_temp
@@ -210,13 +216,18 @@ class MHDEvolution:
             fluxZ_rho = rho_temp * Vz_temp
             fluxR_e   = Vr_temp * (self.rosh / (self.rosh - 1) * p_temp + 1/2 * rho_temp * (Vr_temp**2 + Vz_temp**2) + B_temp**2 / (4 * np.pi))
             fluxZ_e   = Vz_temp * (self.rosh / (self.rosh - 1) * p_temp + 1/2 * rho_temp * (Vr_temp**2 + Vz_temp**2) + B_temp**2 / (4 * np.pi))
-            
+
             source_B   = 0
             source_Ur  = -1 / self.grid_r.rr * (rho_temp * Vr_temp**2 + B_temp**2 / (4 * np.pi))
             source_Uz  = -1 / self.grid_r.rr * rho_temp * Vr_temp * Vz_temp
-            source_rho = -1 / self.grid_r.rr * Vr_temp
+            source_rho = -1 / self.grid_r.rr * rho_temp * Vr_temp
             source_e   = -1 / self.grid_r.rr * Vr_temp * (self.rosh / (self.rosh - 1) * p_temp + 1/2 * rho_temp * (Vr_temp**2 + Vz_temp**2) + B_temp**2 / (4 * np.pi))
-            
+
+            # Updates largest eigenvalues of the Jacobians of the fluxes
+            # eval = V + sqrt(v_s^2 + v_A^2)
+            self.evalR = np.amax(np.abs(Vr_temp) + np.sqrt(self.rosh * p_temp / rho_temp + np.abs(B_temp)**2 / (4 * np.pi * np.abs(rho_temp))))
+            self.evalZ = np.amax(np.abs(Vz_temp) + np.sqrt(self.rosh * p_temp / rho_temp + np.abs(B_temp)**2 / (4 * np.pi * np.abs(rho_temp))))
+
             # Updates conserved variables.
             B   = PDESolver(B_temp,   fluxR_B,   fluxZ_B,   source_B,   self).time_step()
             Ur  = PDESolver(Ur_temp,  fluxR_Ur,  fluxZ_Ur,  source_Ur,  self).time_step()
@@ -225,6 +236,11 @@ class MHDEvolution:
             e   = PDESolver(e_temp,   fluxR_e,   fluxZ_e,   source_e,   self).time_step()
             
             # Imposes boundary conditions on conserved variables
+            B   = self.boundary_conditions(B,   'z', 'periodic')
+            Ur  = self.boundary_conditions(Ur,  'z', 'periodic')
+            Uz  = self.boundary_conditions(Uz,  'z', 'periodic')
+            rho = self.boundary_conditions(rho, 'z', 'periodic')
+            e   = self.boundary_conditions(e,   'z', 'periodic')
 
             # Updates primitive and post-processed variables
             Vr = Ur / rho
@@ -233,15 +249,24 @@ class MHDEvolution:
             T  = self.compute_T(rho, p)
             
             # Imposes boundary conditions on post-processed variables
+            p = self.boundary_conditions(p, 'z', 'periodic')
+            T = self.boundary_conditions(T, 'z', 'periodic')
         
         t1 = time.time()
         print('Simulation finished.')
         print('Time elapsed:', t1-t0)
-        return B, Vr, Vz, rho, p, T
+        
+        self.B = 1e-5 * B
+        self.Vr = 1e3 * Vr
+        self.Vz = 1e3 * Vz
+        self.rho = 1e-15 * rho
+        self.p = 1e-9 * p
+        self.T = 1e0 * T
+        return self.B, self.Vr, self.Vz, self.rho, self.p, self.T
 
     # Pre-processed energy obtained from initial pressure
     def compute_e(self, B, Vr, Vz, rho, p):
-        energy = (p / (self.rosh - 1) + 1/2 * rho * (Vr**2 + Vz**2) + B**2 / (8 * np.pi))
+        energy = p / (self.rosh - 1) + 1/2 * rho * (Vr**2 + Vz**2) + B**2 / (8 * np.pi)
         return energy
 
     # Post-processed pressure obtained from time-updated energy
@@ -256,31 +281,31 @@ class MHDEvolution:
         return temperature
 
     def CFL(self, courant, B, Vr, Vz, rho, T):
-        # This CFL condition isn't correct (missing sqrt in magnetosonic, the 1e-3), but it seems to work.
-        v_fluid = np.amax(np.abs(Vr)) + np.amax(np.abs(Vz))
-        v_alfven2 = np.amax(np.abs(B)**2 / (4 * np.pi * np.abs(rho)))
-        v_sound2 = np.amax(2 * np.abs(T) / Const.m_i)
-        v_magnetosonic = v_alfven2 + v_sound2
-        v_courant = v_fluid + v_magnetosonic
-        dt = self.grid_r.dr / v_courant * 1e-3 * courant
+        # This CFL condition isn't correct, need to adjust order of magnitude
+        v_fluid = np.sqrt(np.abs(Vr)**2 + np.abs(Vz)**2)
+        v_alfven2 = np.abs(B)**2 / (4 * np.pi * np.abs(rho))
+        v_sound2 = 2 * self.rosh * np.abs(T) / Const.m_i
+        v_magnetosonic = np.sqrt(v_alfven2 + v_sound2)
+        v_courant = np.amax(v_fluid + v_magnetosonic)
+        dt = self.grid_r.dr / v_courant * 1e-1 * courant
         
         return dt
 
-    def boundary_conditions(self, u, dimension, type):
+    def boundary_conditions(self, u, dimension, type_of):
         u_temp = u
         
-        if dimension == 'z' and type == 'periodic':
+        if dimension == 'z' and type_of == 'periodic':
             u_temp[:, 0] = u_temp[:, -6]
             u_temp[:, 1] = u_temp[:, -5]
             u_temp[:, 2] = u_temp[:, -4]
             u_temp[:, -3] = u_temp[:, 3]
             u_temp[:, -2] = u_temp[:, 4]
             u_temp[:, -1] = u_temp[:, 5]
-        elif dimension == 'r' and type == 'dirichlet':
+        elif dimension == 'r' and type_of == 'dirichlet':
             pass
-        elif dimension == 'r' and type == 'neumann':
+        elif dimension == 'r' and type_of == 'neumann':
             pass
-        elif dimension == 'r' and type == '1/r':
+        elif dimension == 'r' and type_of == '1/r':
             pass
         
         return u_temp
@@ -303,30 +328,32 @@ class PDESolver:
         u1 = np.zeros((nr, nz))
         u2 = np.zeros((nr, nz))
         u3 = np.zeros((nr, nz))
-        u1 = self.u + dt * (aaa(self.derivativeR, 0, self.u) + aaa(self.derivativeZ, 1, self.u) + self.source)
-        u2 = 3/4 * self.u + 1/4 * u1 + 1/4 * dt * (aaa(self.derivativeR, 0, u1) + aaa(self.derivativeZ, 1, u1) + self.source)
-        u3 = 1/3 * self.u + 2/3 * u2 + 2/3 * dt * (aaa(self.derivativeR, 0, u2) + aaa(self.derivativeZ, 1, u2) + self.source)
+        
+        # aaa is the modified np.apply_along_axis, see aaa_source.py
+        u1 = self.u + dt * (aaa(self.derivativeR, 0, self.u, self.fluxR) + aaa(self.derivativeZ, 1, self.u, self.fluxZ) - self.source)
+        u2 = 3/4 * self.u + 1/4 * u1 + 1/4 * dt * (aaa(self.derivativeR, 0, u1, self.fluxR) + aaa(self.derivativeZ, 1, u1, self.fluxZ) - self.source)
+        u3 = 1/3 * self.u + 2/3 * u2 + 2/3 * dt * (aaa(self.derivativeR, 0, u2, self.fluxR) + aaa(self.derivativeZ, 1, u2, self.fluxZ) - self.source)
 
         return u3
         
     # 5th order WENO-Z FD scheme, component-wise
-    def derivativeR(self, u):
-        self.flux = self.fluxR
-        self.a = 1 #'largest eigenvalue of Jacobian of fluxR, hardcoded'
+    def derivativeR(self, u, flux):
+        self.a = self.evo.evalR
+        self.flux = flux
         nr = self.evo.grid_r.nr
         dr = self.evo.grid_r.dr
-        print(np.shape(self.flux), np.shape(u))
-        dv = np.reshape(np.zeros(nr), (nr, 1))
+
+        dv = np.zeros(nr)
         dv[3: -3] = -1 / dr * (self.fhat(u, 'plus', 0) + self.fhat(u, 'minus', 0) - self.fhat(u, 'plus', -1) - self.fhat(u, 'minus', -1))
         return dv
         
-    def derivativeZ(self, u):
-        self.flux = self.fluxZ
-        self.a = 1 #'largest eigenvalue of Jacobian of fluxZ, hardcoded'
+    def derivativeZ(self, u, flux):
+        self.a = self.evo.evalZ
+        self.flux = flux
         nz = self.evo.grid_z.nr
         dz = self.evo.grid_z.dr
         
-        dv = np.reshape(np.zeros(nz), (nz, 1))
+        dv = np.zeros(nz)
         dv[3: -3] = -1 / dz * (self.fhat(u, 'plus', 0) + self.fhat(u, 'minus', 0) - self.fhat(u, 'plus', -1) - self.fhat(u, 'minus', -1))
         return dv
     
