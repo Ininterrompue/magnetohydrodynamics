@@ -2,27 +2,27 @@ from mhd6solver import MHDSystem, MHDEquilibrium, LinearizedMHD, MHDEvolution
 import numpy as np
 import matplotlib.pyplot as plt
 
-sys = MHDSystem(N_r=400, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-equ = MHDEquilibrium(sys, p_exp=4)
-# lin = LinearizedMHD(equ, k=4, m=0)
+# sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
+# equ = MHDEquilibrium(sys, p_exp=4)
+# lin = LinearizedMHD(equ, k=0.2, m=0)
 # 
 # lin.solve(num_modes=1)
 # lin.plot_eigenvalues()
 # lin.plot_VB(-1, epsilon=0.05)
 # lin.plot_EJ(-1, epsilon=0.05)
 
-nonlin = MHDEvolution(equ, t_max=0.2)
-nonlin.evolve(k=1)
+# nonlin = MHDEvolution(equ, t_max=0.2)
+# nonlin.evolve(k=1)
 
 def find_nearest(array, value): return (np.abs(array - value)).argmin()
 
 # i = find_nearest(sys.grid.rr, 1)
-# g = equ.B**2 / (8 * np.pi * equ.rho)
+# g = equ.B**2 / (4 * np.pi * equ.rho)
 # print(g[i])
-# plt.plot(sys.grid.r[1:-1], equ.p[1:-1], sys.grid.r[1:-1], equ.B[1:-1], sys.grid.r[1:-1], equ.J[1:-1])
+# plt.plot(sys.grid.r[1:-1], equ.p[1:-1], sys.grid.r[1:-1], equ.B[1:-1], sys.grid.r[1:-1], equ.J[1:-1], sys.grid.r[1:-1], g[1:-1])
 # plt.title('Equilibrium configuration')
 # plt.xlabel('x/x0')
-# plt.legend(['P', 'B', 'J'])
+# plt.legend(['P', 'B', 'J', 'g'])
 # plt.show()
 
 # i = np.argmax(equ.B)
@@ -48,41 +48,55 @@ def find_nearest(array, value): return (np.abs(array - value)).argmin()
 
 
 # Asymptotic gamma routine
-# pexp_vals = range(1, 16, 1)
+# pexp_vals = range(4, 17, 1)
 # gammas = []
 # l_char = []
+# gs = []
+# i = find_nearest(sys.grid.rr, 1) 
 # for pexp in pexp_vals:
 #     print(pexp)
 #     equ = MHDEquilibrium(sys, pexp)
+#     gs.append(equ.B[i]**2 / (4 * np.pi * equ.rho[i]))
 #     lin = LinearizedMHD(equ, k=50)
-#     lin.set_z_mode(k=50)
+#     lin.set_z_mode(k=50, m=0)
 #     gammas.append(lin.solve_for_gamma())
 #     l_char.append((find_nearest(equ.p, 0.15) - find_nearest(equ.p, 0.95)) * sys.grid.dr)
 # 
-# plt.scatter(l_char, gammas, s=1)
+# l_char = np.reshape(l_char, (13, 1))
+# gs = np.ones(13)
+# gs = np.reshape(gs, (13, 1))
+# product = l_char * np.square(gammas) / gs
+# 
+# fig = plt.figure()
+# ax = fig.add_subplot(1,1,1)
+# 
+# ax.scatter(l_char, np.square(gammas), s=2, label='gamma^2')
+# ax.scatter(l_char, product, s=2, label='l_char * gamma^2 / g')
 # plt.title('Asymptotic growth rates')
 # plt.xlabel('Characteristic gradient length')
-# plt.ylabel('gamma')
+# plt.legend(loc='upper right')
+# # plt.ylabel('gamma^2')
 # plt.show()
 
 
 ## gamma vs. k
-# k_vals = np.reshape(np.linspace(0.01, 0.2, 20), (20, 1))
-# gammas = []
-# 
-# sys = MHDSystem(N_r=400, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-# equ = MHDEquilibrium(sys, p_exp=4)
-# lin = LinearizedMHD(equ, k=1, m=0)
-# for k in k_vals:
-#     print(k)
-#     lin.set_z_mode(k, m=0)
-#     gammas.append(lin.solve_for_gamma())
-# 
-# plt.plot(k_vals, gammas, k_vals, 1 * k_vals)
-# plt.title('Fastest growing mode')
-# plt.xlabel('k')
-# plt.ylabel('gamma')
-# plt.show()
+k_vals = np.reshape(np.linspace(0.01, 0.2, 20), (20, 1))
+gammas = []
+
+sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
+equ = MHDEquilibrium(sys, p_exp=4)
+lin = LinearizedMHD(equ, k=1, m=0)
+for k in k_vals:
+    print(k)
+    lin.set_z_mode(k, m=0)
+    gammas.append(lin.solve_for_gamma())
+
+plt.plot(k_vals, gammas, k_vals, 1 * k_vals)
+plt.title('Fastest growing mode')
+plt.xlabel('k')
+plt.ylabel('gamma')
+plt.legend(['gamma', 'gk'])
+plt.show()
 
 
 ## gamma vs. B_Z0    
