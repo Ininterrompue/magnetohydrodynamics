@@ -7,8 +7,36 @@ from scipy.sparse import dia_matrix
 from scipy.sparse.linalg import eigs
 import matplotlib.pyplot as plt
 
-global c
-c = 1
+class Const:
+    # c = cm/ns
+#     c   = 30
+# 
+#     # m_i = MeV/c^2
+#     m_i = 1.04
+# 
+#     # I = 1 MA in Gaussian units
+#     I   = 1e1 * 2.37e3
+# 
+#     # T_0 = 100000 K
+#     T_0 = 1e5 * 8.62e-5
+# 
+#     # r_0 = 1 cm
+#     r_0 = 1
+#     
+#     # g = 9.81 cm/ns^2
+#     g = 9.81e-16
+    
+    
+    
+
+    # Normalized constants
+    c   = 1
+    m_i = 1
+    I   = np.sqrt(np.pi)
+    T_0 = 1
+    r_0 = 1
+    g   = 0
+    P_0 = I**2 / (np.pi * r_0**2 * c**2)
 
 class MHDSystem:
     def __init__(self, N_r=50, N_ghost=1, r_max=2*np.pi, m=0, D_eta=0, D_H=0, D_P=0, B_Z0=0):
@@ -38,7 +66,7 @@ class Grid:
         self.r_max = r_max
 
 
-class MHDEquilibrium:
+class MHDEquilibrium0:
     def __init__(self, sys, p_exp):
         # given a pressure, solve for magnetic field
         self.sys = sys
@@ -49,22 +77,24 @@ class MHDEquilibrium:
         self.J = self.compute_j_from_b()
 
     def compute_p(self):
-        return 0.05 + np.exp(-(self.sys.grid.rr)**self.p_exp)
+        return Const.P_0 * (0.05 + np.exp(-(self.sys.grid.rr)**self.p_exp))
         
     def compute_rho_from_p(self):
         # Equation of state. Initial conditions: T = 1 uniform.
-        rho = self.p / 2
+        rho = Const.m_i * self.p / (2 * Const.T_0)
         return rho
 
     def compute_b_from_p(self):
-        b_pressure = 1 - np.exp(-self.sys.grid.rr**self.p_exp) 
+        a = Const.m_i * Const.g / (2 * Const.T_0)
+        b_pressure = (Const.P_0 * (a / self.p_exp * gamma(1 / self.p_exp) * gammainc(1 / self.p_exp, self.sys.grid.rr**self.p_exp)
+                      - np.exp(-(self.sys.grid.rr)**2) + 1 + a * 0.05 * self.sys.grid.rr))
         b = np.sqrt(8 * np.pi) * np.sign(b_pressure) * np.sqrt(np.abs(b_pressure))
         # boundary condition to ensure no NaNs
         b[0] = b[1]
-        return b 
+        return b
 
     def compute_j_from_b(self):
-        return (self.sys.fd.ddr(1) @ self.B) * c / (4 * np.pi)
+        return (self.sys.fd.ddr(1) @ self.B) * Const.c / (4 * np.pi)
 
 
 class FDSystem:
@@ -127,7 +157,8 @@ class FDSystem:
 
 
 class MHDEvolution:
-    def __init__(self, equilibrium, t_max):
+    def __init__(self, lin, equilibrium, t_max):
+        self.lin = lin
         self.equilibrium = equilibrium
         self.t_max = t_max
         
@@ -137,16 +168,17 @@ class MHDEvolution:
         rr = self.equilibrium.sys.grid.rr * np.ones(nr).T
         z = self.equilibrium.sys.grid.r
         zz = self.equilibrium.sys.grid.rr
-
         dr = self.equilibrium.sys.grid.dr
+        t_max = self.t_max
 
-        pert = 1 - 0.01 * np.cos(k * zz)
-        
+        pert = 1 - 0.00 * np.cos(k * zz)
         rho = self.equilibrium.rho * pert.T
         B = self.equilibrium.B * np.ones(nr).T
         p = self.equilibrium.p * pert.T
-        t_max = self.t_max
-
+        Vr = np.zeros((nr, nr))
+        Vz = np.zeros((nr, nr))
+        T = np.ones((nr, nr))
+    
         # ideal for now
         D_eta = 0
         ratio = 2
@@ -154,9 +186,15 @@ class MHDEvolution:
         t = 0
         iteration = 0
         counter = 0
-        Vr = np.zeros((nr, nr))
-        Vz = np.zeros((nr, nr))
-        T = np.ones((nr, nr))
+
+# 
+#         B, Vr, Vz, rho, p, T = self.lin.plot_VB(-1, epsilon=0.5)
+#         B = B.T
+#         Vr = Vr.T
+#         Vz = Vz.T
+#         rho = rho.T
+#         p = p.T
+#         T = T.T
 
         while t < t_max:
             iteration += 1
@@ -174,7 +212,7 @@ class MHDEvolution:
             v_magnetosonic = v_alfven2 + v_sound2
             v_courant = v_fluid + v_magnetosonic
         
-            dt = dr / v_courant * 0.5
+            dt = dr / v_courant * 1e-1 * 0.5
             if dt < 1e-7:
                 print('Solution has not converged')
                 break
@@ -195,8 +233,8 @@ class MHDEvolution:
             Vr[1: -1, 1: -1] = (Vr_temp[1: -1, 1: -1] - dt / (2 * dr) * Vr_temp[1: -1, 1: -1] * (Vr_temp[2: , 1: -1] - Vr_temp[: -2, 1: -1])
                                                       - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (Vr_temp[1: -1, 2: ] - Vr_temp[1: -1, : -2]) 
                                                       - dt / (2 * dr * rho_temp[1: -1, 1: -1]) * (p_temp[2: , 1: -1] - p_temp[: -2, 1: -1]) 
-                                                      - B_temp[1: -1, 1: -1] * dt / (4 * np.pi * rho_temp[1: -1, 1: -1] * 2 * dr) 
-                                                      * (B_temp[2: , 1: -1] - B_temp[: -2, 1: -1]))
+                                                      - B_temp[1: -1, 1: -1] * dt / (4 * np.pi * rho_temp[1: -1, 1: -1] * 2 * dr) * (B_temp[2: , 1: -1] - B_temp[: -2, 1: -1]) 
+                                                      + dt * Const.g)
                                                       
             Vz[1: -1, 1: -1] = (Vz_temp[1: -1, 1: -1] - dt / (2 * dr) * Vr_temp[1: -1, 1: -1] * (Vz_temp[2: , 1: -1] - Vz_temp[: -2, 1: -1])
                                                       - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (Vz_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2])
@@ -207,7 +245,7 @@ class MHDEvolution:
                                                     - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (p_temp[1: -1, 2: ] - p_temp[1: -1, : -2])
                                - ratio * dt / (2 * dr) * p_temp[1: -1, 1: -1] * (Vr_temp[2: , 1: -1] - Vr_temp[: -2, 1: -1])
                                - ratio * dt / (2 * dr) * p_temp[1: -1, 1: -1] * (Vz_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2]))
-            T[1: -1, 1: -1] = p[1: -1, 1: -1] / (2 * rho[1: -1, 1: -1])
+            T[1: -1, 1: -1] = Const.m_i * p[1: -1, 1: -1] / (2 * rho[1: -1, 1: -1])
             
             # Boundary conditions
             rho[0, :] = rho[1, :]
@@ -215,7 +253,7 @@ class MHDEvolution:
             rho[: , 0] = rho[: , -2] 
             rho[: , -1] = rho[: , 1]
             B[0, :] = -B[1, :]
-            B[-1, :] = rr[-2, :] * B[-2, :] / rr[-1, :]
+            B[-1, :] = B[-2, :] + 0.05 * dr
             B[: , 0] = B[: , -2]
             B[: , -1] = B[: , 1]
             Vr[0, :] = -Vr[1, :]
@@ -281,9 +319,9 @@ class MHDEvolution:
         
         plt.show()    
         
-        d_vec=5
+        d_vec=10
         plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
-                   -Vz[::d_vec, ::d_vec], -Vr[::d_vec, ::d_vec], 
+                   Vr[::d_vec, ::d_vec].T, Vz[::d_vec, ::d_vec].T, 
                    pivot='mid', width=0.002, scale=1)
         plt.show()   
 
@@ -414,7 +452,7 @@ class LinearizedMHD:
     def solve(self, num_modes=None):
         if num_modes:
             self.evals, self.evects = eigs(self.fd_operator, k=num_modes, M=self.fd_rhs,
-                                           sigma=3j, which='LI', return_eigenvectors=True)
+                                           sigma=1j, which='LI', return_eigenvectors=True)
         else:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
 
@@ -439,6 +477,8 @@ class LinearizedMHD:
         index = np.argsort(self.evals.imag)
         omega = self.evals[index[i]]
         v_omega = self.evects[:, index[i]]
+        
+        print(omega)
         
         rho = v_omega[0: nr]
         phase = np.exp(-1j * np.angle(rho[0]))
@@ -496,12 +536,14 @@ class LinearizedMHD:
         # 2D contour plots
         z_osc = np.exp(1j * self.k * zz)
         
-        rho_contour = rho_0[1: -1].T + f1(z_osc[1: -1] * rho[1: -1])
-        B_theta_contour = B_0[1: -1].T + f1(z_osc[1: -1] * B_theta[1: -1])
-        V_r_contour = f1(z_osc[1: -1] * V_r[1: -1])
-        V_z_contour = f1(z_osc[1: -1] * V_z[1: -1])
-        p_contour = p_0[1: -1].T + f1(z_osc[1: -1] * p[1: -1])
-        temp_contour = 1 + f1(z_osc[1: -1] * temp_1[1: -1])
+        rho_contour = rho_0.T + f1(z_osc * rho)
+        B_theta_contour = B_0.T + f1(z_osc * B_theta)
+        V_r_contour = f1(z_osc * V_r)
+        V_z_contour = f1(z_osc * V_z)
+        p_contour = p_0.T + f1(z_osc * p)
+        temp_contour = Const.T_0 + f1(z_osc * temp_1)
+        
+        return B_theta_contour, V_r_contour, V_z_contour, rho_contour, p_contour, temp_contour
         
         f = plt.figure()
         f.suptitle(omega.imag)
