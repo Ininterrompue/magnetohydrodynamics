@@ -86,8 +86,8 @@ class MHDEquilibrium0:
 
     def compute_b_from_p(self):
         a = Const.m_i * Const.g / (2 * Const.T_0)
-        b_pressure = (Const.P_0 * (a / self.p_exp * gamma(1 / self.p_exp) * gammainc(1 / self.p_exp, self.sys.grid.rr**self.p_exp)
-                      - np.exp(-(self.sys.grid.rr)**2) + 1 + a * 0.05 * self.sys.grid.rr))
+        b_pressure = (Const.P_0 * (a / self.p_exp * gamma(1 / self.p_exp) * gammainc(1 / self.p_exp, self.sys.grid.rr**self.p_exp))
+                      - np.exp(-(self.sys.grid.rr)**self.p_exp) + 1 + a * 0.05 * self.sys.grid.rr)
         b = np.sqrt(8 * np.pi) * np.sign(b_pressure) * np.sqrt(np.abs(b_pressure))
         # boundary condition to ensure no NaNs
         b[0] = b[1]
