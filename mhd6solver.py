@@ -15,10 +15,10 @@ class Const:
 #     m_i = 1.04
 # 
 #     # I = 1 MA in Gaussian units
-#     I   = 1e1 * 2.37e3
+#     I   = 1e6 * 2.37e3
 # 
 #     # T_0 = 100000 K
-#     T_0 = 1e5 * 8.62e-5
+#     T_0 = 1e5 * 8.62e-11
 # 
 #     # r_0 = 1 cm
 #     r_0 = 1
@@ -35,15 +35,17 @@ class Const:
     I   = np.sqrt(np.pi)
     T_0 = 1
     r_0 = 1
-    g   = 0
+#     g   = 1e-3
+
     P_0 = I**2 / (np.pi * r_0**2 * c**2)
 
 class MHDSystem:
-    def __init__(self, N_r=50, N_ghost=1, r_max=2*np.pi, m=0, D_eta=0, D_H=0, D_P=0, B_Z0=0):
+    def __init__(self, N_r=50, N_ghost=1, r_max=2*np.pi, g=0, D_eta=0, D_H=0, D_P=0, B_Z0=0):
         self.grid = Grid(N_r, N_ghost, r_max)
         self.fd = FDSystem(self.grid)
 
         # set plasma related parameters
+        self.g = g
         self.D_eta = D_eta
         self.D_H = D_H
         self.D_P = D_P
@@ -85,9 +87,9 @@ class MHDEquilibrium0:
         return rho
 
     def compute_b_from_p(self):
-        a = Const.m_i * Const.g / (2 * Const.T_0)
-        b_pressure = (Const.P_0 * (a / self.p_exp * gamma(1 / self.p_exp) * gammainc(1 / self.p_exp, self.sys.grid.rr**self.p_exp))
-                      - np.exp(-(self.sys.grid.rr)**self.p_exp) + 1 + a * 0.05 * self.sys.grid.rr)
+        a = Const.m_i * self.sys.g / (2 * Const.T_0)
+        b_pressure = Const.P_0 * (a / self.p_exp * gamma(1 / self.p_exp) * gammainc(1 / self.p_exp, self.sys.grid.rr**self.p_exp)
+                                  - np.exp(-(self.sys.grid.rr)**self.p_exp) + 1 + 0.05 * a * self.sys.grid.rr)
         b = np.sqrt(8 * np.pi) * np.sign(b_pressure) * np.sqrt(np.abs(b_pressure))
         # boundary condition to ensure no NaNs
         b[0] = b[1]
@@ -187,8 +189,8 @@ class MHDEvolution:
         iteration = 0
         counter = 0
 
-# 
-#         B, Vr, Vz, rho, p, T = self.lin.plot_VB(-1, epsilon=0.5)
+
+#         B, Vr, Vz, rho, p, T = self.lin.plot_VB(-1, epsilon=0.05)
 #         B = B.T
 #         Vr = Vr.T
 #         Vz = Vz.T
@@ -253,7 +255,7 @@ class MHDEvolution:
             rho[: , 0] = rho[: , -2] 
             rho[: , -1] = rho[: , 1]
             B[0, :] = -B[1, :]
-            B[-1, :] = B[-2, :] + 0.05 * dr
+            B[-1, :] = B[-2, :] + 0.05 * Const.m_i * Const.g / (2 * Const.T_0) * Const.P_0 * dr
             B[: , 0] = B[: , -2]
             B[: , -1] = B[: , 1]
             Vr[0, :] = -Vr[1, :]
@@ -278,12 +280,12 @@ class MHDEvolution:
         plt.xlabel('x')
         plt.title('Time evolution')
         plt.show()
-        
-        plt.plot(r[1: -1], B[1, 1: -1], r[1: -1], rho[1, 1: -1], r[1: -1], Vr[1, 1: -1], r[1: -1], Vz[1, 1: -1], r[1: -1], p[1, 1: -1], r[1: -1], T[1, 1: -1])
-        plt.legend(['B', 'rho', 'V_x', 'V_z', 'p', 'T'])
-        plt.xlabel('z')
-        plt.title('x = 1 lineout')
-        plt.show()
+#         
+#         plt.plot(r[1: -1], B[1, 1: -1], r[1: -1], rho[1, 1: -1], r[1: -1], Vr[1, 1: -1], r[1: -1], Vz[1, 1: -1], r[1: -1], p[1, 1: -1], r[1: -1], T[1, 1: -1])
+#         plt.legend(['B', 'rho', 'V_x', 'V_z', 'p', 'T'])
+#         plt.xlabel('z')
+#         plt.title('x = 1 lineout')
+#         plt.show()
         
         R, Z = np.meshgrid(r[1: -1], z[1: -1]) 
         
@@ -322,7 +324,7 @@ class MHDEvolution:
         d_vec=10
         plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
                    Vr[::d_vec, ::d_vec].T, Vz[::d_vec, ::d_vec].T, 
-                   pivot='mid', width=0.002, scale=1)
+                   pivot='mid', width=0.002, scale=10)
         plt.show()   
 
 class LinearizedMHD:
@@ -452,12 +454,12 @@ class LinearizedMHD:
     def solve(self, num_modes=None):
         if num_modes:
             self.evals, self.evects = eigs(self.fd_operator, k=num_modes, M=self.fd_rhs,
-                                           sigma=1j, which='LI', return_eigenvectors=True)
+                                           sigma=3j, which='LI', return_eigenvectors=True)
         else:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
 
     def solve_for_gamma(self):
-        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=0.2j, which='LI', return_eigenvectors=False).imag
+        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=1j, which='LI', return_eigenvectors=False).imag
 
     # ith mode by magnitude of imaginary part
     def plot_VB(self, i, epsilon=1):
@@ -487,6 +489,8 @@ class LinearizedMHD:
         V_r = epsilon * phase * v_omega[2*nr: 3*nr]
         V_z = epsilon * phase * v_omega[3*nr: 4*nr]
         p = epsilon * phase * v_omega[4*nr: 5*nr]
+        
+        # print(np.amax(B_0) / np.amax(B_theta))
         
         p_0 = np.reshape(p_0, (nr, ))
         rho_0 = np.reshape(rho_0, (nr, ))
