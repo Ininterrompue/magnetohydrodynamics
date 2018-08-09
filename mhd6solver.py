@@ -6,6 +6,7 @@ from scipy.linalg import eig
 from scipy.sparse import dia_matrix
 from scipy.sparse.linalg import eigs
 import matplotlib.pyplot as plt
+from scipy.integrate import cumtrapz
 
 class Const:
     # c = cm/ns
@@ -99,13 +100,45 @@ class MHDEquilibrium0:
         return (self.sys.fd.ddr(1) @ self.B) * Const.c / (4 * np.pi)
 
 class CartesianEquilibrium:
-    def __init__(self, sys, p):
+    def __init__(self, sys, rho):
         # given a pressure, solve for magnetic field
         self.sys = sys
-        self.p = p
-        self.rho = self.compute_rho_from_p()
-        self.B = self.compute_b()
-        self.J = self.compute_j_from_b()
+        self.rho = rho
+        self.t = None
+        self.p = None
+        self.B = None
+        self.compute_fields_from_rho() # sets t, p, B given rho
+
+
+    def compute_fields_from_rho(self):
+        # 1) Compute temp/pressure that is needed to balance g
+        rho0 = self.rho
+        p0 = cumtrapz(self.sys.g * rho0, self.sys.grid.r, initial=0)
+        p0 = p0 + (2 * Const.T_0) * rho0[0] / Const.m_i
+        t0 = Const.m_i * p0 / rho0 / 2
+
+        # 2) Reduce the temperature in the region with low pressure
+        t0 = t0 * (rho0 - min(rho0)) ** 2
+        self.t = t0
+        p0 = (2 * t0) * rho0 / Const.m_i
+        self.p = p0
+
+        # 3) Use the new pressure to compute B
+        fd = self.sys.fd
+        dpdr = fd.ddr(1) + fd.lhs_bc('derivative') + fd.rhs_bc('derivative')
+        accel_term = self.sys.g * rho0 - dpdr @ p0
+        accel_term[0] = accel_term[1]
+        ddrB2 = 8 * np.pi * accel_term
+        B2 = cumtrapz(ddrB2, self.sys.grid.r, initial=0)
+        b = np.sign(B2) * np.abs(B2) ** 0.5
+
+        # 4) Subtract off errors due to using trapezoid integration
+        dpressure = dpdr @ (p0 + b ** 2 / (8 * np.pi))
+        delta = dpressure - self.sys.g * rho0
+        delta[0] = 0
+        delta[-1] = 0
+        self.B = (b ** 2 - 8 * np.pi * cumtrapz(delta, self.sys.grid.r, initial=0)) ** 0.5
+
 
     def compute_rho_from_p(self):
         # Equation of state. Initial conditions: T = 1 uniform.
@@ -119,7 +152,10 @@ class CartesianEquilibrium:
         ddr = ddr + fd.lhs_bc('value') + fd.rhs_bc('derivative')
 
         dpdr = fd.ddr(1) + fd.lhs_bc('derivative') + fd.rhs_bc('derivative')
-        ddrB2 = 8 * np.pi * (g * self.rho - dpdr @ self.p)
+        accel_term = g * self.rho - dpdr @ self.p
+        accel_term[0] = self.p[0]
+        accel_term[-1] = 0
+        ddrB2 = 8 * np.pi * accel_term
 
         B2 = np.linalg.solve(ddr, ddrB2)
         b = np.sign(B2) * np.abs(B2)**0.5
@@ -415,27 +451,27 @@ class LinearizedMHD:
        
         m0 = fd.zeros()
         m_rho_rho = fd.zeros()
-#         m_Br_Br = fd.zeros()
-#         m_Br_Btheta = fd.zeros()
-#         m_Btheta_rho = fd.zeros()
-#         m_Btheta_Br = fd.zeros()
+        m_Br_Br = fd.zeros()
+        m_Br_Btheta = fd.zeros()
+        m_Btheta_rho = fd.zeros()
+        m_Btheta_Br = fd.zeros()
         m_Btheta_Btheta = fd.zeros()
-#         m_Btheta_Bz = fd.zeros()
-#         m_Btheta_p = fd.zeros()
-#         m_Bz_Br = fd.zeros()
-#         m_Bz_Btheta = fd.zeros()
-#         m_Bz_Bz = fd.zeros()
+        m_Btheta_Bz = fd.zeros()
+        m_Btheta_p = fd.zeros()
+        m_Bz_Br = fd.zeros()
+        m_Bz_Btheta = fd.zeros()
+        m_Bz_Bz = fd.zeros()
         m_Vr_Vr = fd.zeros()
-#         m_Vtheta_Vtheta = fd.zeros()
+        m_Vtheta_Vtheta = fd.zeros()
         m_Vz_Vz = fd.zeros()
         m_p_p = fd.zeros()
         
         # Resistive term
-#         m_Br_Br = m_Br_Br + D_eta * (1j / rr * fd.ddr(1) + 1j * fd.ddr(2) - fd.diag(1j * m**2 / rr**2 + 1j * k**2 + 1j / rr**2))
-#         m_Br_Btheta = m_Br_Btheta + D_eta * fd.diag(2 * m / rr**2)
-#         m_Btheta_Btheta = m_Btheta_Btheta + D_eta * (1j / rr * fd.ddr(1) + 1j * fd.ddr(2) - fd.diag(1j * m**2 / rr**2 + 1j * k**2 + 1j / rr**2))
-#         m_Btheta_Br = m_Btheta_Br + D_eta * fd.diag(-2 * m / rr**2)
-#         m_Bz_Bz = m_Bz_Bz + D_eta * (1j / rr * fd.ddr(1) + 1j * fd.ddr(2) - fd.diag(1j * m**2 / rr**2 + 1j * k**2)) 
+        m_Br_Br = m_Br_Br + D_eta * (1j / rr * fd.ddr(1) + 1j * fd.ddr(2) - fd.diag(1j * m**2 / rr**2 + 1j * k**2 + 1j / rr**2))
+        m_Br_Btheta = m_Br_Btheta + D_eta * fd.diag(2 * m / rr**2)
+        m_Btheta_Btheta = m_Btheta_Btheta + D_eta * (1j / rr * fd.ddr(1) + 1j * fd.ddr(2) - fd.diag(1j * m**2 / rr**2 + 1j * k**2 + 1j / rr**2))
+        m_Btheta_Br = m_Btheta_Br + D_eta * fd.diag(-2 * m / rr**2)
+        m_Bz_Bz = m_Bz_Bz + D_eta * (1j / rr * fd.ddr(1) + 1j * fd.ddr(2) - fd.diag(1j * m**2 / rr**2 + 1j * k**2))
         
         # Hall term (m = 0 only)
 #         m_Br_Br = m_Br_Br + D_H * fd.diag(-k / (rr * rho) * (fd.ddr(1) @ (rr * B)))
@@ -459,9 +495,9 @@ class LinearizedMHD:
 #         m_Br_Br         = m_Br_Br         + fd.lhs_bc('value')      + fd.rhs_bc('value')
         m_Btheta_Btheta = m_Btheta_Btheta + fd.lhs_bc('value')      + fd.rhs_bc('value')
 #         m_Bz_Bz         = m_Bz_Bz         + fd.lhs_bc('derivative') + fd.rhs_bc('derivative')
-        m_Vr_Vr         = m_Vr_Vr         + fd.lhs_bc('value')      + fd.rhs_bc('derivative')
+        m_Vr_Vr         = m_Vr_Vr         + fd.lhs_bc('value')      + fd.rhs_bc('value')
 #         m_Vtheta_Vtheta = m_Vtheta_Vtheta + fd.lhs_bc('value')      + fd.rhs_bc('value')
-        m_Vz_Vz         = m_Vz_Vz         + fd.lhs_bc('derivative') + fd.rhs_bc('value')
+        m_Vz_Vz         = m_Vz_Vz         + fd.lhs_bc('value') + fd.rhs_bc('value')
         m_p_p           = m_p_p           + fd.lhs_bc('derivative') + fd.rhs_bc('value')
                       
         M = np.block([[m_rho_rho,    m0,              m_rho_Vr,    m_rho_Vz,    m0        ],
@@ -525,7 +561,7 @@ class LinearizedMHD:
         
         p_0 = np.reshape(p_0, (nr, ))
         rho_0 = np.reshape(rho_0, (nr, ))
-        temp = (p + p_0) / (2 * (rho + rho_0))
+        temp = (p + p_0) / (2 * (rho + rho_0)) - (p_0) / (2 * (rho_0))
         temp_1 = (p - 2 * rho) / (2 * (rho + rho_0))
               
         # 1D eigenvectors
@@ -564,7 +600,7 @@ class LinearizedMHD:
                 
         ax = plt.subplot(2,3,6)
         ax.set_title('T')
-        ax.plot(r[1: -1], f1(temp[1: -1]) - 1)
+        ax.plot(r[1: -1], f1(temp[1: -1]) )
 
         plt.show()
         

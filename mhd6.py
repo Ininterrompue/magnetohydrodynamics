@@ -1,21 +1,27 @@
-from mhd6solver import Const, MHDSystem, MHDEquilibrium0, LinearizedMHD, CartesianEquilibrium
+from mhd6solver import Const, MHDSystem, MHDEquilibrium0, LinearizedMHD, CartesianEquilibrium, FDSystem
 #from mhdweno2 import MHDGrid, MHDEquilibrium, MHDEvolution
 import numpy as np
 import matplotlib.pyplot as plt
 
-sys = MHDSystem(N_r=128, N_ghost=1, r_max=4, g=0, D_eta=0, D_H=0, D_P=0, B_Z0=0)
+sys = MHDSystem(N_r=256, N_ghost=1, r_max=6, g=0.1, D_eta=1e-4, D_H=0, D_P=0, B_Z0=0)
 
-p0 = 0.5*(1-np.tanh( (sys.grid.r - 2)/0.1 )) + 0.01
-plt.plot(sys.grid.r, p0)
+rho0 = 0.5 * (1 - np.tanh((sys.grid.r - 3) / 0.1)) + 0.02
+plt.plot(sys.grid.r, rho0)
 plt.show()
 
-equ0 = CartesianEquilibrium(sys, p0)
+equ0 = CartesianEquilibrium(sys, rho0)
 
-lin = LinearizedMHD(equ0, k=1, m=0)
+plt.plot(sys.grid.r, equ0.rho, sys.grid.r, equ0.p,
+         sys.grid.r, equ0.t, sys.grid.r, equ0.B)
+plt.legend(['rho', 'P', 'T', 'B'])
+plt.show()
+
+lin = LinearizedMHD(equ0, k=.1, m=0)
 
 lin.solve()
 lin.plot_VB(-1, epsilon=0.05)
 lin.plot_eigenvalues()
+
 # # #
 # lin.solve(num_modes=None)
 # lin.plot_eigenvalues()
@@ -101,20 +107,20 @@ plt.show()
 ## gamma vs. k
 k_vals = np.linspace(0.01, 1, 10)
 gammas = np.zeros(k_vals.shape)
-sys = MHDSystem(N_r=64, N_ghost=1, r_max=4, g=-1, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-p0 = 0.5*(1-np.tanh( (sys.grid.r - 2)/0.1 )) + 0.01
-equ0 = CartesianEquilibrium(sys, p0)
-lin = LinearizedMHD(equ0, k=1, m=0)
+sys = MHDSystem(N_r=128, N_ghost=1, r_max=6, g=0.1, D_eta=1e-4, D_H=0, D_P=0, B_Z0=0)
+rho0 = 0.5 * (1 - np.tanh((sys.grid.r - 3) / 0.1)) + 0.05
+equ0 = CartesianEquilibrium(sys, rho0)
 
 for i, k in enumerate(k_vals):
     print(k)
-    lin = LinearizedMHD(equ0, k=1, m=0)
+    lin = LinearizedMHD(equ0, k=k, m=0)
     lin.set_z_mode(k, m=0)
-    lin.solve()
-    evals = np.imag(lin.evals)
-    gammas[i] = np.max(evals)
+    gammas[i] = lin.solve_for_gamma()
+    # lin.solve()
+    # evals = np.imag(lin.evals)
+    # gammas[i] = np.max(evals)
 
-plt.plot(k_vals, gammas, k_vals, k_vals**0.5)
+plt.plot(k_vals, gammas, k_vals, 0.36*k_vals**0.5)
 plt.title('Fastest growing mode')
 plt.xlabel('k')
 plt.ylabel('gamma')
@@ -130,6 +136,15 @@ for i,G in enumerate(g_vals):
     sys = MHDSystem(N_r=64, N_ghost=1, r_max=4, g=G, D_eta=0, D_H=0, D_P=0, B_Z0=0)
     p0 = 0.5 * (1 - np.tanh((sys.grid.r - 2) / 0.1)) + 0.01
     equ0 = CartesianEquilibrium(sys, p0)
+
+    plt.plot(sys.grid.r, equ0.p, sys.grid.r, equ0.B, sys.grid.r,
+             equ0.J)
+    plt.title('Equilibrium configuration')
+    plt.xlabel('x/x0')
+    plt.legend(['P', 'B', 'J'])
+    plt.show()
+
+
     lin = LinearizedMHD(equ0, k=1, m=0)
     lin.set_z_mode(k=1, m=0)
     gammas[i] = lin.solve_for_gamma()
