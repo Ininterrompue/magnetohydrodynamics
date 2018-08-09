@@ -108,6 +108,7 @@ class CartesianEquilibrium:
         self.p = None
         self.B = None
         self.compute_fields_from_rho() # sets t, p, B given rho
+        self.J = self.compute_j_from_b()
 
 
     def compute_fields_from_rho(self):
@@ -137,7 +138,8 @@ class CartesianEquilibrium:
         delta = dpressure - self.sys.g * rho0
         delta[0] = 0
         delta[-1] = 0
-        self.B = (b ** 2 - 8 * np.pi * cumtrapz(delta, self.sys.grid.r, initial=0)) ** 0.5
+        b = b ** 2 - 8 * np.pi * cumtrapz(delta, self.sys.grid.r, initial=0)
+        self.B = np.sqrt(np.abs(b))
 
 
     def compute_rho_from_p(self):
@@ -495,7 +497,7 @@ class LinearizedMHD:
 #         m_Br_Br         = m_Br_Br         + fd.lhs_bc('value')      + fd.rhs_bc('value')
         m_Btheta_Btheta = m_Btheta_Btheta + fd.lhs_bc('value')      + fd.rhs_bc('value')
 #         m_Bz_Bz         = m_Bz_Bz         + fd.lhs_bc('derivative') + fd.rhs_bc('derivative')
-        m_Vr_Vr         = m_Vr_Vr         + fd.lhs_bc('value')      + fd.rhs_bc('value')
+        m_Vr_Vr         = m_Vr_Vr         + fd.lhs_bc('value')      + fd.rhs_bc('derivative')
 #         m_Vtheta_Vtheta = m_Vtheta_Vtheta + fd.lhs_bc('value')      + fd.rhs_bc('value')
         m_Vz_Vz         = m_Vz_Vz         + fd.lhs_bc('value') + fd.rhs_bc('value')
         m_p_p           = m_p_p           + fd.lhs_bc('derivative') + fd.rhs_bc('value')
@@ -521,12 +523,12 @@ class LinearizedMHD:
     def solve(self, num_modes=None):
         if num_modes:
             self.evals, self.evects = eigs(self.fd_operator, k=num_modes, M=self.fd_rhs,
-                                           sigma=3j, which='LI', return_eigenvectors=True)
+                                           sigma=1.5j, which='LI', return_eigenvectors=True)
         else:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
 
     def solve_for_gamma(self):
-        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=1j, which='LI', return_eigenvectors=False).imag
+        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=1.5j, which='LI', return_eigenvectors=False).imag
 
     # ith mode by magnitude of imaginary part
     def plot_VB(self, i, epsilon=1):
@@ -622,32 +624,32 @@ class LinearizedMHD:
     
         ax = plt.subplot(2,3,1)
         ax.set_title('B_y')
-        plot_2 = ax.contourf(R, Z, B_theta_contour, 20)
+        plot_2 = ax.contourf(R, Z, B_theta_contour[1:-1,1:-1], 20)
         plt.colorbar(plot_2)
     
         ax = plt.subplot(2,3,2)
         ax.set_title('V_x')
-        plot_4 = ax.contourf(R, Z, V_r_contour, 20)
+        plot_4 = ax.contourf(R, Z, V_r_contour[1:-1,1:-1], 20)
         plt.colorbar(plot_4)
     
         ax = plt.subplot(2,3,3)
         ax.set_title('V_z')
-        plot_6 = ax.contourf(R, Z, V_z_contour, 20)
+        plot_6 = ax.contourf(R, Z, V_z_contour[1:-1,1:-1], 20)
         plt.colorbar(plot_6)
     
         ax = plt.subplot(2,3,4)
         ax.set_title('rho')
-        plot_7 = ax.contourf(R, Z, rho_contour, 20)
+        plot_7 = ax.contourf(R, Z, rho_contour[1:-1,1:-1], 20)
         plt.colorbar(plot_7)
         
         ax = plt.subplot(2,3,5)
         ax.set_title('p')
-        plot_8 = ax.contourf(R, Z, p_contour, 20)
+        plot_8 = ax.contourf(R, Z, p_contour[1:-1,1:-1], 20)
         plt.colorbar(plot_8)
         
         ax = plt.subplot(2,3,6)
         ax.set_title('T')
-        plot_9 = ax.contourf(R, Z, temp_contour, 20)
+        plot_9 = ax.contourf(R, Z, temp_contour[1:-1,1:-1], 20)
         plt.colorbar(plot_9)
     
         plt.show()
@@ -656,7 +658,7 @@ class LinearizedMHD:
         vort_theta = np.reshape(1j * self.k * V_r - (fd.ddr(1) @ V_z), (nr, ))
         vort_theta_contour = epsilon * f1(z_osc[1: -1] * vort_theta[1: -1])
 
-        plot = plt.contourf(R, Z, vort_theta_contour, 200, cmap='plasma')
+        plot = plt.contourf(R, Z, vort_theta_contour, 200, cmap='coolwarm')
         plt.colorbar(plot)
         
         d_vec = 15
