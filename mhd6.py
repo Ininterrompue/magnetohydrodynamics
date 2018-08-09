@@ -1,12 +1,22 @@
-from mhd6solver import Const, MHDSystem, MHDEquilibrium0, LinearizedMHD#, MHDEvolution
-from mhdweno2 import MHDGrid, MHDEquilibrium, MHDEvolution 
+from mhd6solver import Const, MHDSystem, MHDEquilibrium0, LinearizedMHD, CartesianEquilibrium
+#from mhdweno2 import MHDGrid, MHDEquilibrium, MHDEvolution
 import numpy as np
 import matplotlib.pyplot as plt
 
-# sys = MHDSystem(N_r=64, N_ghost=1, r_max=2*np.pi, g=1, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-# equ0 = MHDEquilibrium0(sys, p_exp=4)
-# lin = LinearizedMHD(equ0, k=1, m=0)
-# # # 
+sys = MHDSystem(N_r=128, N_ghost=1, r_max=4, g=0, D_eta=0, D_H=0, D_P=0, B_Z0=0)
+
+p0 = 0.5*(1-np.tanh( (sys.grid.r - 2)/0.1 )) + 0.01
+plt.plot(sys.grid.r, p0)
+plt.show()
+
+equ0 = CartesianEquilibrium(sys, p0)
+
+lin = LinearizedMHD(equ0, k=1, m=0)
+
+lin.solve()
+lin.plot_VB(-1, epsilon=0.05)
+lin.plot_eigenvalues()
+# # #
 # lin.solve(num_modes=None)
 # lin.plot_eigenvalues()
 # lin.plot_VB(-5, epsilon=0.05)
@@ -28,11 +38,11 @@ def find_nearest(array, value): return (np.abs(array - value)).argmin()
 # i = find_nearest(sys.grid.rr, 1)
 # g = equ.B**2 / (4 * np.pi * equ.rho)
 # print(g[i])
-# plt.plot(sys.grid.r[1:-1], equ0.p[1:-1], sys.grid.r[1:-1], equ0.B[1:-1], sys.grid.r[1:-1], equ0.J[1:-1])#, sys.grid.r[1:-1], g[1:-1])
-# plt.title('Equilibrium configuration')
-# plt.xlabel('x/x0')
-# plt.legend(['P', 'B', 'J'])#, 'g'])
-# plt.show()
+plt.plot(sys.grid.r[1:-1], equ0.p[1:-1], sys.grid.r[1:-1], equ0.B[1:-1], sys.grid.r[1:-1], equ0.J[1:-1])#, sys.grid.r[1:-1], g[1:-1])
+plt.title('Equilibrium configuration')
+plt.xlabel('x/x0')
+plt.legend(['P', 'B', 'J'])#, 'g'])
+plt.show()
 
 # i = np.argmax(equ.B)
 # g = equ.B[i]**2 / (8 * np.pi * 0.55 * sys.grid.rr[i])
@@ -47,7 +57,7 @@ def find_nearest(array, value): return (np.abs(array - value)).argmin()
 #     lin = LinearizedMHD(equ, k=50)
 #     lin.set_z_mode(k=50)
 #     gammas.append(lin.solve_for_gamma())
-# 
+#
 # plt.plot(pexp_vals, gammas, '.-')
 # plt.title('Asymptotic growth rates')
 # plt.xlabel('Pressure exponent')
@@ -89,35 +99,40 @@ def find_nearest(array, value): return (np.abs(array - value)).argmin()
 
 
 ## gamma vs. k
-# k_vals = np.reshape(np.linspace(0.01, 0.2, 20), (20, 1))
-# gammas = []
-# 
-# sys = MHDSystem(N_r=200, N_ghost=1, r_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-# equ0 = MHDEquilibrium0(sys, p_exp=4)
-# lin = LinearizedMHD(equ0, k=1, m=0)
-# for k in k_vals:
-#     print(k)
-#     lin.set_z_mode(k, m=0)
-#     gammas.append(lin.solve_for_gamma())
-# 
-# plt.plot(k_vals, gammas, k_vals), Const.g * k_vals)
-# plt.title('Fastest growing mode')
-# plt.xlabel('k')
-# plt.ylabel('gamma')
-# plt.legend(['gamma', 'gk'])
-# plt.show()
+k_vals = np.linspace(0.01, 1, 10)
+gammas = np.zeros(k_vals.shape)
+sys = MHDSystem(N_r=64, N_ghost=1, r_max=4, g=-1, D_eta=0, D_H=0, D_P=0, B_Z0=0)
+p0 = 0.5*(1-np.tanh( (sys.grid.r - 2)/0.1 )) + 0.01
+equ0 = CartesianEquilibrium(sys, p0)
+lin = LinearizedMHD(equ0, k=1, m=0)
+
+for i, k in enumerate(k_vals):
+    print(k)
+    lin = LinearizedMHD(equ0, k=1, m=0)
+    lin.set_z_mode(k, m=0)
+    lin.solve()
+    evals = np.imag(lin.evals)
+    gammas[i] = np.max(evals)
+
+plt.plot(k_vals, gammas, k_vals, k_vals**0.5)
+plt.title('Fastest growing mode')
+plt.xlabel('k')
+plt.ylabel('gamma')
+plt.legend(['gamma', 'gk'])
+plt.show()
 
 ## gamma vs. g
-g_vals = np.reshape(np.linspace(0.01, 1000, 30), (30, 1))
-gammas = []
+g_vals = np.linspace(-10, 10, 20)
+gammas = np.zeros(g_vals.shape)
 
-for G in g_vals:
+for i,G in enumerate(g_vals):
     print(G)
-    sys = MHDSystem(N_r=128, N_ghost=1, r_max=2*np.pi, g=G, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-    equ0 = MHDEquilibrium0(sys, p_exp=4)
+    sys = MHDSystem(N_r=64, N_ghost=1, r_max=4, g=G, D_eta=0, D_H=0, D_P=0, B_Z0=0)
+    p0 = 0.5 * (1 - np.tanh((sys.grid.r - 2) / 0.1)) + 0.01
+    equ0 = CartesianEquilibrium(sys, p0)
     lin = LinearizedMHD(equ0, k=1, m=0)
     lin.set_z_mode(k=1, m=0)
-    gammas.append(lin.solve_for_gamma())
+    gammas[i] = lin.solve_for_gamma()
 
 plt.plot(g_vals, gammas)
 plt.title('Fastest growing mode')

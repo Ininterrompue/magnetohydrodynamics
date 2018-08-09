@@ -98,6 +98,36 @@ class MHDEquilibrium0:
     def compute_j_from_b(self):
         return (self.sys.fd.ddr(1) @ self.B) * Const.c / (4 * np.pi)
 
+class CartesianEquilibrium:
+    def __init__(self, sys, p):
+        # given a pressure, solve for magnetic field
+        self.sys = sys
+        self.p = p
+        self.rho = self.compute_rho_from_p()
+        self.B = self.compute_b()
+        self.J = self.compute_j_from_b()
+
+    def compute_rho_from_p(self):
+        # Equation of state. Initial conditions: T = 1 uniform.
+        rho = Const.m_i * self.p / (2 * Const.T_0)
+        return rho
+
+    def compute_b(self):
+        fd = FDSystem(self.sys.grid)
+        g = self.sys.g
+        ddr = fd.ddr(1)
+        ddr = ddr + fd.lhs_bc('value') + fd.rhs_bc('derivative')
+
+        dpdr = fd.ddr(1) + fd.lhs_bc('derivative') + fd.rhs_bc('derivative')
+        ddrB2 = 8 * np.pi * (g * self.rho - dpdr @ self.p)
+
+        B2 = np.linalg.solve(ddr, ddrB2)
+        b = np.sign(B2) * np.abs(B2)**0.5
+        return b
+
+    def compute_j_from_b(self):
+        return (self.sys.fd.ddr(1) @ self.B) * Const.c / (4 * np.pi)
+
 
 class FDSystem:
     def __init__(self, grid):
@@ -363,7 +393,7 @@ class LinearizedMHD:
         ratio = 2
         
         # Gravity
-        g = 1
+        g = self.equilibrium.sys.g
 
         # Ideal MHD
         m_rho_Vr = -1j * fd.ddr_product(rho)
