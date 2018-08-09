@@ -3,9 +3,9 @@ from mhdweno2 import MHDGrid, MHDEquilibrium, MHDEvolution
 import numpy as np
 import matplotlib.pyplot as plt
 
-# sys = MHDSystem(N_r=64, N_ghost=1, r_max=2*np.pi, g=1, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-# equ0 = MHDEquilibrium0(sys, p_exp=4)
-# lin = LinearizedMHD(equ0, k=1, m=0)
+sys = MHDSystem(N_r=64, N_ghost=1, r_max=2*np.pi, g=1, D_eta=0, D_H=0, D_P=0, B_Z0=0)
+equ0 = MHDEquilibrium0(sys, p_exp=4)
+lin = LinearizedMHD(equ0, k=1, m=0)
 # # # 
 # lin.solve(num_modes=None)
 # lin.plot_eigenvalues()
@@ -15,13 +15,13 @@ import matplotlib.pyplot as plt
 # nonlin = MHDEvolution(lin, equ0, t_max=0.0001)
 # nonlin.evolve(k=1)
 # 
-# grid_r = MHDGrid(res=64, n_ghost=3, r_max=2*np.pi)
-# grid_z = MHDGrid(res=64, n_ghost=3, r_max=2*np.pi)
-# equ = MHDEquilibrium(grid_r, p_exp=4)
-# evo = MHDEvolution(lin, grid_r, grid_z, equ, k=1, rosh=2, D_eta=0, D_nu=0)
-# evo.evolve(courant=0.5, t_max=200)
-# evo.plot_lineouts()
-# evo.plot_evolved()
+grid_r = MHDGrid(res=64, n_ghost=3, r_max=2*np.pi)
+grid_z = MHDGrid(res=64, n_ghost=3, r_max=2*np.pi)
+equ = MHDEquilibrium(grid_r, p_exp=4)
+evo = MHDEvolution(lin, grid_r, grid_z, equ, k=1, rosh=2, D_eta=0, D_nu=0)
+evo.evolve(courant=0.8, t_max=10)
+evo.plot_lineouts()
+evo.plot_evolved()
 
 def find_nearest(array, value): return (np.abs(array - value)).argmin()
 
@@ -108,22 +108,22 @@ def find_nearest(array, value): return (np.abs(array - value)).argmin()
 # plt.show()
 
 ## gamma vs. g
-g_vals = np.reshape(np.linspace(0.01, 1000, 30), (30, 1))
-gammas = []
-
-for G in g_vals:
-    print(G)
-    sys = MHDSystem(N_r=128, N_ghost=1, r_max=2*np.pi, g=G, D_eta=0, D_H=0, D_P=0, B_Z0=0)
-    equ0 = MHDEquilibrium0(sys, p_exp=4)
-    lin = LinearizedMHD(equ0, k=1, m=0)
-    lin.set_z_mode(k=1, m=0)
-    gammas.append(lin.solve_for_gamma())
-
-plt.plot(g_vals, gammas)
-plt.title('Fastest growing mode')
-plt.xlabel('g')
-plt.ylabel('gamma')
-plt.show()
+# g_vals = np.reshape(np.linspace(0.01, 1000, 30), (30, 1))
+# gammas = []
+# 
+# for G in g_vals:
+#     print(G)
+#     sys = MHDSystem(N_r=128, N_ghost=1, r_max=2*np.pi, g=G, D_eta=0, D_H=0, D_P=0, B_Z0=0)
+#     equ0 = MHDEquilibrium0(sys, p_exp=4)
+#     lin = LinearizedMHD(equ0, k=1, m=0)
+#     lin.set_z_mode(k=1, m=0)
+#     gammas.append(lin.solve_for_gamma())
+# 
+# plt.plot(g_vals, gammas)
+# plt.title('Fastest growing mode')
+# plt.xlabel('g')
+# plt.ylabel('gamma')
+# plt.show()
 
 
 ## gamma vs. B_Z0    
