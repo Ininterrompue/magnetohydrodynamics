@@ -21,10 +21,10 @@ lin.plot_eigenvalues()
 # lin.plot_eigenvalues()
 # lin.plot_VB(-5, epsilon=0.05)
 # # lin.plot_EJ(-1, epsilon=0.05)
-# 
+#
 # nonlin = MHDEvolution(lin, equ0, t_max=0.0001)
 # nonlin.evolve(k=1)
-# 
+#
 # grid_r = MHDGrid(res=64, n_ghost=3, r_max=2*np.pi)
 # grid_z = MHDGrid(res=64, n_ghost=3, r_max=2*np.pi)
 # equ = MHDEquilibrium(grid_r, p_exp=4)
@@ -71,7 +71,7 @@ plt.show()
 # gammas = []
 # l_char = []
 # gs = []
-# i = find_nearest(sys.grid.rr, 1) 
+# i = find_nearest(sys.grid.rr, 1)
 # for pexp in pexp_vals:
 #     print(pexp)
 #     equ = MHDEquilibrium(sys, pexp)
@@ -80,15 +80,15 @@ plt.show()
 #     lin.set_z_mode(k=50, m=0)
 #     gammas.append(lin.solve_for_gamma())
 #     l_char.append((find_nearest(equ.p, 0.15) - find_nearest(equ.p, 0.95)) * sys.grid.dr)
-# 
+#
 # l_char = np.reshape(l_char, (13, 1))
 # gs = np.ones(13)
 # gs = np.reshape(gs, (13, 1))
 # product = l_char * np.square(gammas) / gs
-# 
+#
 # fig = plt.figure()
 # ax = fig.add_subplot(1,1,1)
-# 
+#
 # ax.scatter(l_char, np.square(gammas), s=2, label='gamma^2')
 # ax.scatter(l_char, product, s=2, label='l_char * gamma^2 / g')
 # plt.title('Asymptotic growth rates')

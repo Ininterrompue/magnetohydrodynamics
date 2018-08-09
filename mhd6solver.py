@@ -201,6 +201,7 @@ class MHDEvolution:
         z = self.equilibrium.sys.grid.r
         zz = self.equilibrium.sys.grid.rr
         dr = self.equilibrium.sys.grid.dr
+        g = self.equilibrium.sys.g
         t_max = self.t_max
 
         pert = 1 - 0.00 * np.cos(k * zz)
@@ -266,7 +267,7 @@ class MHDEvolution:
                                                       - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (Vr_temp[1: -1, 2: ] - Vr_temp[1: -1, : -2]) 
                                                       - dt / (2 * dr * rho_temp[1: -1, 1: -1]) * (p_temp[2: , 1: -1] - p_temp[: -2, 1: -1]) 
                                                       - B_temp[1: -1, 1: -1] * dt / (4 * np.pi * rho_temp[1: -1, 1: -1] * 2 * dr) * (B_temp[2: , 1: -1] - B_temp[: -2, 1: -1]) 
-                                                      + dt * Const.g)
+                                                      + dt * g)
                                                       
             Vz[1: -1, 1: -1] = (Vz_temp[1: -1, 1: -1] - dt / (2 * dr) * Vr_temp[1: -1, 1: -1] * (Vz_temp[2: , 1: -1] - Vz_temp[: -2, 1: -1])
                                                       - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (Vz_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2])
@@ -285,7 +286,7 @@ class MHDEvolution:
             rho[: , 0] = rho[: , -2] 
             rho[: , -1] = rho[: , 1]
             B[0, :] = -B[1, :]
-            B[-1, :] = B[-2, :] + 0.05 * Const.m_i * Const.g / (2 * Const.T_0) * Const.P_0 * dr
+            B[-1, :] = B[-2, :] + 0.05 * Const.m_i * g / (2 * Const.T_0) * Const.P_0 * dr
             B[: , 0] = B[: , -2]
             B[: , -1] = B[: , 1]
             Vr[0, :] = -Vr[1, :]
