@@ -10,17 +10,17 @@ import matplotlib.pyplot as plt
 class Const:
     # c = cm/ns
 #     c   = 30
-#     
-#     # m_i = eV/c^2
-#     m_i = 1.04e6
-#     
-#     # I = 1 MA in Gaussian units
-#     I   = 3e6
-#     
-#     # T_0 = 10000 K
-#     T_0 = 1e4 * 8.62e-5
-#     
-#     # r_0 = 1 cm
+# #     
+# #     # m_i = MeV/c^2
+#     m_i = 1.04
+# #     
+# #     # I = 1 MA in Gaussian units
+#     I   = 1e1 * 2.37e3
+# #     
+# #     # T_0 = 100000 K
+#     T_0 = 1e5 * 8.62e-5
+# #     
+# #     # r_0 = 1 cm
 #     r_0 = 1
 
     # Normalized constants
@@ -59,7 +59,7 @@ class Grid:
         self.r_max = r_max
 
 
-class MHDEquilibrium:
+class MHDEquilibrium0:
     def __init__(self, sys, p_exp):
         # given a pressure, solve for magnetic field
         self.sys = sys
@@ -168,11 +168,12 @@ class FDSystem:
 
 
 class MHDEvolution:
-    def __init__(self, equilibrium, t_max):
+    def __init__(self, equilibrium, lin, t_max):
         self.equilibrium = equilibrium
+        self.lin = lin
         self.t_max = t_max
         
-    def evolve(self, k=1):
+    def evolve(self):
         nr = self.equilibrium.sys.grid.N
         r = self.equilibrium.sys.grid.r
         rr = self.equilibrium.sys.grid.rr * np.ones(nr).T
@@ -181,28 +182,36 @@ class MHDEvolution:
 
         dr = self.equilibrium.sys.grid.dr
 
-        pert = 1 - 0.01 * np.cos(k * zz)
+        pert = 1 - 0.01 * np.cos(self.lin.k * zz)
         
         rho = self.equilibrium.rho * pert.T
         B = self.equilibrium.B * np.ones(nr).T
         p = self.equilibrium.p * pert.T
+#         B, Vr, Vz, rho, p, T = self.lin.plot_VB(-1, epsilon=1000)
+#         B = B.T
+#         Vr = Vr.T
+#         Vz = Vz.T
+#         rho = rho.T
+#         p = p.T
+#         T = T.T
         t_max = self.t_max
 
         # diffusion, artificial viscosity, ratio of specific heats
-        D_eta = 0
-        D_nu = 0
-        ratio = 2
+        D_eta = 0.05
+        D_nu = 0.001
+        ratio = 5/3
         
         t = 0
         iteration = 0
         counter = 0
         dim = 0
+        
         Vr = np.zeros((nr, nr))
         Vz = np.zeros((nr, nr))
         T = Const.T_0 * np.ones((nr, nr))
         
-        T_sum = []
-        time_at_sum = []
+#         T_sum = []
+#         time_at_sum = []
 
         while t < t_max:
             iteration += 1
@@ -214,14 +223,14 @@ class MHDEvolution:
             p_temp = p.copy()
     
             # Courant condition
-            v_fluid = np.amax(np.abs(Vr)) + np.amax(np.abs(Vz))
+            v_fluid = np.amax(np.sqrt(np.abs(Vr)**2 + np.amax(np.abs(Vz))**2))
             v_alfven2 = np.amax(np.abs(B)**2 / (4 * np.pi * np.abs(rho)))
             v_sound2 = np.amax(2 * np.abs(T) / Const.m_i)
-            v_magnetosonic = v_alfven2 + v_sound2
+            v_magnetosonic = np.sqrt(v_alfven2 + v_sound2)
             v_courant = v_fluid + v_magnetosonic
         
-            dt = dr / v_courant * 1e-3 * 0.4
-            if dt < 1e-6:
+            dt = dr / v_courant * 1e-2 * 0.4
+            if dt < 1e-9:
                 print('Solution has not converged')
                 break
                 
@@ -229,9 +238,8 @@ class MHDEvolution:
             if counter == 100:
                 dim = dim + 1
                 counter = 0
-                T_sum.append(1e6 * sum(T[1: -1, 1]))  
-                time_at_sum.append(1e-3 * t)   
-                print(iteration, v_courant, t, dt, 1e6 * sum(T[1: -1, 1]))  
+#                 time_at_sum.append(1e-3 * t)   
+                print(iteration, t, dt)  
                 
             # Finite difference procedure                      
             rho[1: -1, 1: -1] = (rho_temp[1: -1, 1: -1] - dt / (2 * dr * rr[1: -1, 1: -1]) * (rr[2: , 1: -1] * rho_temp[2: , 1: -1] * Vr_temp[2: , 1: -1] 
@@ -266,7 +274,9 @@ class MHDEvolution:
             p[1: -1, 1: -1] = (p_temp[1: -1, 1: -1] - dt / (2 * dr) * Vr_temp[1: -1, 1: -1] * (p_temp[2: , 1: -1] - p_temp[: -2, 1: -1]) 
                                                     - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (p_temp[1: -1, 2: ] - p_temp[1: -1, : -2])
                                - ratio * dt / (2 * dr) * p_temp[1: -1, 1: -1] / rr[1: -1, 1: -1] * (rr[2: , 1: -1] * Vr_temp[2: , 1: -1] - rr[: -2, 1: -1] * Vr_temp[: -2, 1: -1])
-                               - ratio * dt / (2 * dr) * p_temp[1: -1, 1: -1] * (Vz_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2]))
+                               - ratio * dt / (2 * dr) * p_temp[1: -1, 1: -1] * (Vz_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2])
+                               + (ratio - 1) * dt * (4 * np.pi * D_eta / Const.c**2) * ((1 / (2 * dr) * (B_temp[1: -1, 2:] - B_temp[1: -1, :-2]))**2
+                               + 1 / rr[1: -1, 1: -1]**2 * (1 / (2 * dr) * (rr[2:, 1: -1] * B_temp[2:, 1: -1] - rr[:-2, 1: -1] * B_temp[:-2, 1: -1]))**2))
             T[1: -1, 1: -1] = p[1: -1, 1: -1] / (2 * rho[1: -1, 1: -1])
             
             # Boundary conditions
@@ -296,16 +306,16 @@ class MHDEvolution:
             T[:, -1] = T[:, 1]
             
         # Normalization
-        rho = rho * 1e-15
-        p = p * 1e-9
-        T = T * 1e6
-        B = B * 1e-5
-        Vr = Vr * 1e3
-        Vz = Vz * 1e3
+        rho = rho #* 1e-15
+        p = p #* 1e-9
+        T = T #* 1e6
+        B = B #* 1e-5
+        Vr = Vr #* 1e3
+        Vz = Vz #* 1e3
         
-        T_sum = np.reshape(T_sum, (dim, 1))
-        np.savetxt('T_sum.csv', T_sum, delimiter=',')
-        np.savetxt('time_at_sum.csv', time_at_sum, delimiter=',')
+#         T_sum = np.reshape(T_sum, (dim, 1))
+#         np.savetxt('T_sum.csv', T_sum, delimiter=',')
+#         np.savetxt('time_at_sum.csv', time_at_sum, delimiter=',')
     
         plt.plot(r[1: -1], B[1: -1, 1], r[1: -1], rho[1: -1, 1], r[1: -1], Vr[1: -1, 1], r[1: -1], p[1: -1, 1], r[1: -1], T[1: -1, 1])
         plt.legend(['B', 'rho', 'V_r', 'p', 'T'])
@@ -349,7 +359,7 @@ class MHDEvolution:
         
         d_vec=5
         plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
-                   -Vz[::d_vec, ::d_vec], -Vr[::d_vec, ::d_vec], 
+                   Vr[::d_vec, ::d_vec].T, Vz[::d_vec, ::d_vec].T, 
                    pivot='mid', width=0.002, scale=100)
         plt.show()   
 
@@ -495,12 +505,29 @@ class LinearizedMHD:
     def solve(self, num_modes=None):
         if num_modes:
             self.evals, self.evects = eigs(self.fd_operator, k=num_modes, M=self.fd_rhs,
-                                           sigma=2j, which='LI', return_eigenvectors=True)
+                                           sigma=0.11j, which='LI', return_eigenvectors=True)
         else:
             self.evals, self.evects = eig(self.fd_operator, self.fd_rhs)
 
+
     def solve_for_gamma(self):
-        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=8j, which='LI', return_eigenvectors=False).imag
+        return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=0.5j, which='LI', return_eigenvectors=False).imag
+        
+    def remove_baddies(self):
+        evals = []
+        evects = []
+        for i in range(len(self.evals)):
+            if np.abs(self.evals[i].real) < 1e-6:
+                evals.append(self.evals[i])
+                evects.append(self.evects[:, i])
+        self.evals = np.asarray(evals)
+        self.evects = np.asarray(evects)
+        self.evects = self.evects.T
+        
+    def extract(self):
+        index = np.argsort(self.evals.imag)
+        omega = self.evals[index[-1]]
+        return omega.imag
 
     # ith mode by magnitude of imaginary part
     def plot_VB(self, i, epsilon=1):
@@ -517,23 +544,27 @@ class LinearizedMHD:
         p_0 = self.equilibrium.p
         B_0 = self.equilibrium.B
         B_Z0 = self.equilibrium.sys.B_Z0
-
+        
+        # print(self.evals.imag)
         index = np.argsort(self.evals.imag)
+        # print(index, index[i])
         omega = self.evals[index[i]]
         v_omega = self.evects[:, index[i]]
         
         print(omega)
+        # print(v_omega)
+        # epsilon = 1000
         
         rho = v_omega[0: nr]
         phase = np.exp(-1j * np.angle(rho[0]))
-        rho = epsilon * phase * rho
-        B_r = epsilon * phase * v_omega[nr: 2*nr]
+        rho     = epsilon * phase * rho
+        B_r     = epsilon * phase * v_omega[nr: 2*nr]
         B_theta = epsilon * phase * v_omega[2*nr: 3*nr]
-        B_z = epsilon * phase * v_omega[3*nr: 4*nr]
-        V_r = epsilon * phase * v_omega[4*nr: 5*nr]
+        B_z     = epsilon * phase * v_omega[3*nr: 4*nr]
+        V_r     = epsilon * phase * v_omega[4*nr: 5*nr]
         V_theta = epsilon * phase * v_omega[5*nr: 6*nr]
-        V_z = epsilon * phase * v_omega[6*nr: 7*nr]
-        p = epsilon * phase * v_omega[7*nr: 8*nr]
+        V_z     = epsilon * phase * v_omega[6*nr: 7*nr]
+        p       = epsilon * phase * v_omega[7*nr: 8*nr]
         
         p_0 = np.reshape(p_0, (nr, ))
         rho_0 = np.reshape(rho_0, (nr, ))
@@ -548,7 +579,7 @@ class LinearizedMHD:
         
         # Cut off plots at r = 4
 #         i = find_nearest(rr, 4) + 1
-        norm = 1 / np.max(f1(B_theta))
+        # norm = 1 / np.max(f1(B_theta))
         # print(norm)
 #         
 #         rho = norm * f1(rho[1:i])
@@ -629,7 +660,9 @@ class LinearizedMHD:
         V_theta_contour = f1(z_osc * V_theta)
         V_z_contour = f1(z_osc * V_z)
         p_contour = p_0.T + f1(z_osc * p)
-        temp_contour = 1 + f1(z_osc * temp_1)
+        temp_contour = Const.T_0 + f1(z_osc * temp_1)
+        
+        return B_theta_contour, V_r_contour, V_z_contour, rho_contour, p_contour, temp_contour
         
 #         i = find_nearest(rr, 3) + 1
 #         rr = rr * rr.T
@@ -696,11 +729,12 @@ class LinearizedMHD:
         
         # V and vorticity
         vort_theta = np.reshape(1j * self.k * V_r - (fd.ddr(1) @ V_z), (nr, ))
+        vort_theta[0:2] = 0
         vort_theta_contour = epsilon * f1(z_osc[1: -1] * vort_theta[1: -1])
         
 #         np.savetxt('vort.csv', vort_theta_contour[:,1:i], delimiter=',')
 
-        plot = plt.contourf(R, Z, vort_theta_contour, 200, cmap='spring')
+        plot = plt.contourf(R, Z, 1e3 * vort_theta_contour, 200, cmap='coolwarm')
         plt.colorbar(plot)
         
         d_vec = 15
@@ -721,15 +755,22 @@ class LinearizedMHD:
         plt.title('Streamlines and div V')
         plt.xlabel('r')
         plt.ylabel('z')
+        
+        # Column vectors so we can do the matrix multiplication
         V_r = np.reshape(V_r, (nr, 1))
         V_z = np.reshape(V_z, (nr, 1))
         
         divV = 1 / rr * (fd.ddr(1) @ (rr * V_r)) + 1j * self.k * V_z
+        
+        # List so we can do the 2D properly
         divV = np.reshape(divV, (nr, ))
         divV_contour = epsilon * f1(z_osc[1: -1] * divV[1: -1])
-        plot = plt.contourf(R, Z, divV_contour, 200, cmap='spring')
+        plot = plt.contourf(R, Z, 1e4 * divV_contour, 200, cmap='coolwarm')
         plt.colorbar(plot)
-        strm = plt.streamplot(r[1:-1], z[1:-1], V_r_contour[1: -1, 1:-1], V_z_contour[1:-1, 1:-1], linewidth=0.5, arrowsize=1, density=2, color='black')
+        quiv = plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
+                   V_r_contour[::d_vec, ::d_vec], V_z_contour[::d_vec, ::d_vec], 
+                   pivot='mid', width=0.002, scale=0.1)
+        strm = plt.streamplot(r[1:-1], z[1:-1], V_r_contour[1: -1, 1:-1], V_z_contour[1:-1, 1:-1], linewidth=0.5, arrowsize=0.001, density=2, color='black')
         
         plt.show()
         
