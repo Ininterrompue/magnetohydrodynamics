@@ -66,8 +66,8 @@ bc_array = {'rho': ['value', 'value'],
             'Vz': ['derivative', 'derivative'],
             'p': ['value', 'value'],
             }
-lin = LinearizedMHDCylindrical(equ, k=10, m=0, bc_array=bc_array)
-lin.solve(num_modes=3)
+lin = LinearizedMHDCylindrical(equ, k=1, m=0, bc_array=bc_array)
+lin.solve()
 
 p = MHDPlotter(lin)
 p.plot_VB(-1, epsilon=0.05)

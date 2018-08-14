@@ -569,6 +569,7 @@ class LinearizedMHDBaseClass:
         self.k = k
         self.m = m
         self._sigma = None
+        self.n_comp = 0
 
     def set_z_mode(self, k, m):
         self.fd_operator = self.construct_operator(k, m)
@@ -582,11 +583,8 @@ class LinearizedMHDBaseClass:
     def construct_rhs(self):
         # Generalized eigenvalue problem matrix
         nr = self.equilibrium.sys.grid.N
-        n_comp = 5
-        if self.equilibrium.sys.geom == 'cylindrical':
-            n_comp = 7
-        G = np.identity(n_comp * nr)
-        for i in range(n_comp):
+        G = np.identity(self.n_comp * nr)
+        for i in range(self.n_comp):
             G[i * nr, i * nr] = 0
             G[(i + 1) * nr - 1, (i + 1) * nr - 1] = 0
 
@@ -625,6 +623,7 @@ class LinearizedMHDBaseClass:
 class LinearizedMHDCartesian(LinearizedMHDBaseClass):
     def __init__(self, equilibrium, k=1, m=0, bc_array=None):
         super().__init__(equilibrium, k=k, m=m, bc_array=bc_array)
+        self.n_comp = 5
         self.set_z_mode(k, m)
 
     def construct_operator(self, k=1, m=0):
@@ -733,7 +732,8 @@ class LinearizedMHDCartesian(LinearizedMHDBaseClass):
 
 class LinearizedMHDCylindrical(LinearizedMHDBaseClass):
     def __init__(self, equilibrium, k=1, m=0, bc_array=None):
-        super().__init__(equilibrium, k=1, m=0, bc_array=None)
+        super().__init__(equilibrium, k=k, m=m, bc_array=bc_array)
+        self.n_comp = 7
         self.set_z_mode(k, m)
 
     def construct_operator(self, k=1, m=0):
