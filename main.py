@@ -1,4 +1,5 @@
-from mhdsolver import MHDSystem, AnalyticalEquilibrium, LinearizedMHD,\
+from mhdsolver import MHDSystem, AnalyticalEquilibrium, LinearizedMHDCartesian,\
+    LinearizedMHDCylindrical, MHDPlotter, \
     CartesianEquilibrium, FDSystem, MHDEquilibrium, AnalyticalEquilibriumCylindrical
 #from mhdweno2 import MHDGrid, MHDEquilibrium, MHDEvolution
 import numpy as np
@@ -39,20 +40,19 @@ bc_array = {'rho': ['value', 'value'],
 #
 
 
-lin = LinearizedMHD(equ0, k=10, m=0, bc_array=bc_array)
+lin = LinearizedMHDCartesian(equ0, k=10, m=0, bc_array=bc_array)
 lin.solve(num_modes=3)
-lin.plot_VB(-1, epsilon=0.05)
-lin.plot_VB(-2, epsilon=0.05)
-lin.plot_VB(-3, epsilon=0.05)
+
+p = MHDPlotter(lin)
+p.plot_VB(-1, epsilon=0.05)
+p.plot_VB(-2, epsilon=0.05)
+p.plot_VB(-3, epsilon=0.05)
 
 
 
 # Cylindrical RT example
 sys = MHDSystem(N_r=64, N_ghost=1, r_max=3, g=1, D_eta=0, D_H=0, D_P=0, B_Z0=0, geom='cylindrical')
-p0 = 1 * (0.05 + np.exp(-(sys.grid.r) ** 4))
-equ = MHDEquilibrium(sys, p0)
-
-equ = AnalyticalEquilibriumCylindrical(sys, 4)
+equ = AnalyticalEquilibriumCylindrical(sys, 6)
 
 
 plt.plot(sys.grid.r, equ.rho, sys.grid.r, equ.p,
@@ -66,11 +66,13 @@ bc_array = {'rho': ['value', 'value'],
             'Vz': ['derivative', 'derivative'],
             'p': ['value', 'value'],
             }
-lin = LinearizedMHD(equ, k=10, m=0, bc_array=bc_array)
+lin = LinearizedMHDCylindrical(equ, k=10, m=0, bc_array=bc_array)
 lin.solve(num_modes=3)
-lin.plot_VB(-1, epsilon=0.05)
-lin.plot_VB(-2, epsilon=0.05)
-lin.plot_VB(-3, epsilon=0.05)
+
+p = MHDPlotter(lin)
+p.plot_VB(-1, epsilon=0.05)
+p.plot_VB(-2, epsilon=0.05)
+p.plot_VB(-3, epsilon=0.05)
 
 
 
