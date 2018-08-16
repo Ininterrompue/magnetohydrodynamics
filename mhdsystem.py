@@ -408,15 +408,8 @@ class Plot:
         
         # d_rB_dr = fd.ddr(1) @ (rr * Btheta)
         d_Bz_dr = fd.ddr(1) @ Bz    
-        
-        Jr     = Const.c / (4 * np.pi) * -1j * k * B_1
-        Jtheta = Const.c / (4 * np.pi) * (1j * k * Br - d_Bz_dr)
-        
-        if coordinates == 'Cylindrical':
-            Jz1 = Const.c / (4 * np.pi * rr) * (fd.ddr(1) @ (rr * B_1))
-        elif coordinates == 'Cartesian':
-            Jz1 = Const.c / (4 * np.pi) * (fd.ddr(1) @ B_1)
-            
+
+        Jr, Jtheta, Jz1 = self.lin.compute_currents(epsilon=epsilon)
         Jz     = J_0 + Jz1
         
         Er_ideal     = Vz * Btheta - Vtheta * Bz

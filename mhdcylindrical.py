@@ -253,7 +253,15 @@ class LinearCyl:
         index = np.argsort(self.evals.imag)
         omega = self.evals[index[-1]]
         return omega.imag
-        
+
+    def compute_currents(self, epsilon):
+        Jr     = Const.c / (4 * np.pi) * -1j * self.k * B_1
+        Jtheta = Const.c / (4 * np.pi) * (1j * k * Br - d_Bz_dr)
+        Jz1 = Const.c / (4 * np.pi * rr) * (fd.ddr(1) @ (rr * B_1))
+        # elif coordinates == 'Cartesian':
+        #     Jz1 = Const.c / (4 * np.pi) * (fd.ddr(1) @ B_1)
+        return Jr, Jtheta, Jz1
+
         
 class EvolveCyl:
     def __init__(self, sys, equ, lin, k=1, rosh=5/3, D_nu=0):
