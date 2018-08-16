@@ -253,15 +253,153 @@ class LinearCyl:
         index = np.argsort(self.evals.imag)
         omega = self.evals[index[-1]]
         return omega.imag
+        
+    def extract_from_evec(self, i=-1, epsilon=0.05):
+        if self.evecs is None:
+            return
+            
+        self.i = i
+        self.epsilon = epsilon
+            
+        fd    = self.equ.sys.fd
+        nr    = self.equ.sys.grid_r.nr
+        r     = self.equ.sys.grid_r.r
+        rr    = self.equ.sys.grid_r.rr
+        z     = self.equ.sys.grid_z.r
+        zz    = self.equ.sys.grid_z.rr
+        rho_0 = self.equ.rho
+        p_0   = self.equ.p
+        B_0   = self.equ.b
+        B_Z0  = self.equ.sys.B_Z0
+        
+        index = np.argsort(self.evals.imag)
+        omega = self.evals[index[i]]
+        v_omega = self.evecs[:, index[i]]
+        
+        # Correct for overall phase factor
+        rho   = v_omega[0: nr]
+        phase = np.exp(-1j * np.angle(rho[0]))
+        
+        # Extract eigenmodes
+        rho    = epsilon * phase * rho
+        Br     = epsilon * phase * v_omega[1*nr: 2*nr]
+        Btheta = epsilon * phase * v_omega[2*nr: 3*nr]
+        Bz     = epsilon * phase * v_omega[3*nr: 4*nr]
+        Vr     = epsilon * phase * v_omega[4*nr: 5*nr]
+        Vtheta = epsilon * phase * v_omega[5*nr: 6*nr]
+        Vz     = epsilon * phase * v_omega[6*nr: 7*nr]
+        p      = epsilon * phase * v_omega[7*nr: 8*nr]
+        
+#         p_0    = np.reshape(p_0, (nr, ))
+#         rho_0  = np.reshape(rho_0, (nr, ))
 
-    def compute_currents(self, epsilon):
-        Jr     = Const.c / (4 * np.pi) * -1j * self.k * B_1
-        Jtheta = Const.c / (4 * np.pi) * (1j * k * Br - d_Bz_dr)
-        Jz1 = Const.c / (4 * np.pi * rr) * (fd.ddr(1) @ (rr * B_1))
+        rho    = np.reshape(rho, (nr, 1))
+        Br     = np.reshape(Br, (nr, 1))
+        Btheta = np.reshape(Btheta, (nr, 1))
+        Bz     = np.reshape(Bz, (nr, 1))
+        Vr     = np.reshape(Vr, (nr, 1))
+        Vtheta = np.reshape(Vtheta, (nr, 1))
+        Vz     = np.reshape(Vz, (nr, 1))
+        p      = np.reshape(p, (nr, 1))
+        
+        temp   = (p + p_0) / (2 * (rho + rho_0))
+        temp_1 = (p - 2 * rho) / (2 * (rho + rho_0))
+        temp   = np.reshape(temp, (nr, 1))
+        temp_1 = np.reshape(temp_1, (nr, 1))
+        
+        return rho, Br, Btheta, Bz, Vr, Vtheta, Vz, p, temp, temp_1
+        
+    def compute_divV(self):
+        fd = self.equ.sys.fd
+        rr = self.equ.sys.grid_r.rr
+        nr = self.equ.sys.grid_r.nr
+        zz = self.equ.sys.grid_z.rr
+        z_osc = np.exp(1j * self.k * zz)
+        rho, Br, Btheta, Bz, Vr, Vtheta, Vz, p, temp, temp_1 = self.extract_from_evec(self.i, self.epsilon)
+        divV = 1 / rr * (fd.ddr(1) @ (rr * Vr)) + 1j * self.k * Vz
+        divV = np.reshape(divV, (nr, ))
+        divV_contour = self.epsilon * np.real(z_osc[1: -1] * divV[1: -1])
+        return divV_contour
+
+    def compute_vort(self):
+        fd = self.equ.sys.fd
+        nr = self.equ.sys.grid_r.nr
+        zz = self.equ.sys.grid_z.rr
+        z_osc = np.exp(1j * self.k * zz)
+        rho, Br, Btheta, Bz, Vr, Vtheta, Vz, p, temp, temp_1 = self.extract_from_evec(self.i, self.epsilon)
+        vort_theta = np.reshape(1j * self.k * Vr - (fd.ddr(1) @ Vz), (nr, ))
+        vort_theta[0: 2] = 0 # Removes edge effects
+        vort_theta_contour = self.epsilon * np.real(z_osc * vort_theta)
+        return vort_theta_contour
+ 
+    def compute_currents(self):
+        fd = self.equ.sys.fd
+        rr = self.equ.sys.grid_r.rr
+        nr = self.equ.sys.grid_r.nr
+        rho, Br, Btheta, Bz, Vr, Vtheta, Vz, p, temp, temp_1 = self.extract_from_evec(self.i, self.epsilon)
+        Jr     = Const.c / (4 * np.pi) * -1j * self.k * Btheta
+        Jtheta = Const.c / (4 * np.pi) * (1j * self.k * Br - (fd.ddr(1) @ Bz))
+        Jz1    = Const.c / (4 * np.pi * rr) * (fd.ddr(1) @ (rr * Btheta))
         # elif coordinates == 'Cartesian':
         #     Jz1 = Const.c / (4 * np.pi) * (fd.ddr(1) @ B_1)
         return Jr, Jtheta, Jz1
-
+        
+    def compute_E_ideal(self):
+        rho, Br, Btheta, Bz, Vr, Vtheta, Vz, p, temp, temp_1 = self.extract_from_evec(self.i, self.epsilon)
+        B_0  = self.equ.b
+        B_Z0 = self.equ.sys.B_Z0
+        nr   = self.equ.sys.grid_r.nr
+        Btheta = B_0 + Btheta
+        Bz     = B_Z0 * np.reshape(np.ones(nr), (nr, 1)) + Bz
+        Er_ideal     = Vz * Btheta - Vtheta * Bz
+        Etheta_ideal = Vr * Bz - Vz * Br
+        Ez_ideal     = Vtheta * Br - Vr * Btheta
+        return Er_ideal, Etheta_ideal, Ez_ideal
+        
+    def compute_E_resistive(self):
+        D_eta = self.equ.sys.D_eta
+        J_0   = self.equ.j       
+        Jr, Jtheta, Jz1 = self.compute_currents()
+        Jz = J_0 + Jz1
+        Er_resistive     = 4 * np.pi * D_eta / Const.c**2 * Jr
+        Etheta_resistive = 4 * np.pi * D_eta / Const.c**2 * Jtheta
+        Ez0_resistive    = 4 * np.pi * D_eta / Const.c**2 * J_0
+        Ez1_resistive    = 4 * np.pi * D_eta / Const.c**2 * Jz1
+        return Er_resistive, Etheta_resistive, Ez0_resistive, Ez1_resistive
+        
+    def compute_E_hall(self):
+        nr    = self.equ.sys.grid_r.nr
+        D_H   = self.equ.sys.D_H
+        B_Z0  = self.equ.sys.B_Z0
+        rho_0 = self.equ.rho
+        B_0   = self.equ.b
+        J_0   = self.equ.j
+        Jr, Jtheta, Jz1 = self.compute_currents()
+        Jz = J_0 + Jz1
+        rho, Br, Btheta, Bz, Vr, Vtheta, Vz, p, temp, temp_1 = self.extract_from_evec(self.i, self.epsilon)
+        rho    = rho_0 + rho
+        Btheta = B_0 + Btheta
+        Bz     = B_Z0 * np.reshape(np.ones(nr), (nr, 1)) + Bz
+        Er0_hall    = 4 * np.pi * D_H / Const.c**2 / rho_0 * (-J_0 * B_0)
+        Er1_hall    = 4 * np.pi * D_H / Const.c**2 / rho * (Jtheta * Bz - Jz * Btheta) - 4 * np.pi * D_H / rho_0 * (-J_0 * B_0)
+        Etheta_hall = 4 * np.pi * D_H / Const.c**2 / rho * (Jz * Br - Jr * Bz)
+        Ez_hall     = 4 * np.pi * D_H / Const.c**2 / rho * (Jr * Btheta - Jtheta * Br)
+        return Er0_hall, Er1_hall, Etheta_hall, Ez_hall
+        
+    def compute_E_pressure(self): 
+        fd    = self.equ.sys.fd 
+        D_P   = self.equ.sys.D_P
+        rho_0 = self.equ.rho
+        p_0   = self.equ.p
+        nr    = self.equ.sys.grid_r.nr
+        rho, Br, Btheta, Bz, Vr, Vtheta, Vz, p, temp, temp_1 = self.extract_from_evec(self.i, self.epsilon)
+        rho     = rho_0 + rho
+        p_total = p_0 + p
+        Er0_pressure    = -D_P / Const.c / rho_0 * (fd.ddr(1) @ p_0)
+        Er1_pressure    = -D_P / Const.c / rho * (fd.ddr(1) @ p_total) - Er0_pressure
+        Etheta_pressure = np.zeros(nr)
+        Ez_pressure     = -D_P / Const.c / rho * 1j * self.k * p
+        return Er0_pressure, Er1_pressure, Etheta_pressure, Ez_pressure
         
 class EvolveCyl:
     def __init__(self, sys, equ, lin, k=1, rosh=5/3, D_nu=0):
@@ -299,8 +437,7 @@ class EvolveCyl:
 #         rho = rho.T
 #         p   = p.T
 #         T   = T.T
-        
-        print('Simulation seeded.')
+    
         return B, Vr, Vz, rho, p, T 
         
     def CFL(self, courant, B, Vr, Vz, rho, T):
@@ -334,7 +471,8 @@ class EvolveCyl:
         iteration = 0
         counter = 0
         dim = 0
-
+        
+        print('Simulation seeded.')
         while t < t_max:
             iteration += 1
             counter += 1
@@ -440,7 +578,8 @@ class EvolveCyl:
         
         t = 0
         cycle = 0
-
+        
+        print('Simulation seeded.')
         print('Cycle | t | dt')
         t0 = time.time()
         while t < t_max:

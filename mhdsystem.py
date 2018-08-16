@@ -152,45 +152,17 @@ class Plot:
         plt.show() 
         
         
-    def plot_VB(self, i=-1, epsilon=0.05, coordinates='Cylindrical'):
-        if self.lin.evecs is None:
-            return
-            
-        fd    = self.equ.sys.fd
-        nr    = self.equ.sys.grid_r.nr
-        r     = self.equ.sys.grid_r.r
-        rr    = self.equ.sys.grid_r.rr
-        z     = self.equ.sys.grid_z.r
-        zz    = self.equ.sys.grid_z.rr
+    def plot_VB(self, i=-1, epsilon=0.05):
+        rho, Br, Btheta, Bz, Vr, Vtheta, Vz, p, temp, temp_1 = self.lin.extract_from_evec(i, epsilon)
         rho_0 = self.equ.rho
         p_0   = self.equ.p
         B_0   = self.equ.b
         B_Z0  = self.equ.sys.B_Z0
-        k     = self.lin.k
-        
-        index = np.argsort(self.lin.evals.imag)
-        omega = self.lin.evals[index[i]]
-        v_omega = self.lin.evecs[:, index[i]]
-        print(omega)
-        
-        # Correct for overall phase factor
-        rho   = v_omega[0: nr]
-        phase = np.exp(-1j * np.angle(rho[0]))
-        
-        # Extract eigenmodes
-        rho    = epsilon * phase * rho
-        Br     = epsilon * phase * v_omega[1*nr: 2*nr]
-        Btheta = epsilon * phase * v_omega[2*nr: 3*nr]
-        Bz     = epsilon * phase * v_omega[3*nr: 4*nr]
-        Vr     = epsilon * phase * v_omega[4*nr: 5*nr]
-        Vtheta = epsilon * phase * v_omega[5*nr: 6*nr]
-        Vz     = epsilon * phase * v_omega[6*nr: 7*nr]
-        p      = epsilon * phase * v_omega[7*nr: 8*nr]
-        
-        p_0    = np.reshape(p_0, (nr, ))
-        rho_0  = np.reshape(rho_0, (nr, ))
-        temp   = (p + p_0) / (2 * (rho + rho_0))
-        temp_1 = (p - 2 * rho) / (2 * (rho + rho_0))
+        r = self.sys.grid_r.r
+        nr = self.sys.grid_r.nr
+        z = self.sys.grid_z.r
+        zz = self.sys.grid_z.rr
+        k = self.lin.k
         
         # def f1(x): return np.abs(x)
         # def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
@@ -242,7 +214,7 @@ class Plot:
                 
         ax = plt.subplot(2,3,6)
         ax.set_title('T')
-        ax.plot(r[1: -1], f1(temp[1: -1]) - 1, 
+        ax.plot(r[1: -1], f1(temp[1: -1]) - Const.T_0, 
                 r[1: -1], f2(temp[1: -1]))
 
         plt.show()
@@ -311,9 +283,7 @@ class Plot:
         plt.show()
         
         # Vorticity
-        vort_theta = np.reshape(1j * k * Vr - (fd.ddr(1) @ Vz), (nr, ))
-        vort_theta[0: 2] = 0 # Removes edge effects
-        vort_theta_contour = epsilon * f1(z_osc * vort_theta)
+        vort_theta_contour = self.lin.compute_vort()
         
         plot = plt.contourf(R, Z, 1e3 * vort_theta_contour[1: -1, 1: -1], 200, cmap='coolwarm')
         plt.colorbar(plot)
@@ -328,18 +298,14 @@ class Plot:
         plt.show()
         
         # Divergence of V
-        Vr = np.reshape(Vr, (nr, 1))
-        Vz = np.reshape(Vz, (nr, 1))
-        if coordinates == 'Cylindrical':
-            divV = 1 / rr * (fd.ddr(1) @ (rr * Vr)) + 1j * k * Vz
-        elif coordinates == 'Cartesian':
-            divV = (fd.ddr(1) @ Vr) + 1j * k * Vz
+        divV_contour = self.lin.compute_divV()
+        
+#         elif coordinates == 'Cartesian':
+#             divV = (fd.ddr(1) @ Vr) + 1j * k * Vz
 
         plt.title('Streamlines and div V')
         plt.xlabel('r')
         plt.ylabel('z')
-        divV = np.reshape(divV, (nr, ))
-        divV_contour = epsilon * f1(z_osc[1: -1] * divV[1: -1])
         plot = plt.contourf(R, Z, 1e4 * divV_contour, 200, cmap='coolwarm')
         plt.colorbar(plot)
         quiv = plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
@@ -353,83 +319,26 @@ class Plot:
     def plot_EJ(self, i=-1, epsilon=0.05):
         if self.lin.evecs is None:
             return
-            
-        fd    = self.sys.fd
+        
+        rho, Br, Btheta, Bz, Vr, Vtheta, Vz, p, temp, temp_1 = self.lin.extract_from_evec(i, epsilon)
         nr    = self.sys.grid_r.nr
         r     = self.sys.grid_r.r
-        rr    = self.sys.grid_r.rr
         z     = self.sys.grid_z.r
         zz    = self.sys.grid_z.rr
-        rho_0 = self.equ.rho
-        p_0   = self.equ.p
-        B_0   = self.equ.b
         J_0   = self.equ.j
-        D_eta = self.sys.D_eta
-        D_H   = self.sys.D_H
-        D_P   = self.sys.D_P
-        B_Z0  = self.sys.B_Z0
         k     = self.lin.k
 
-        index = np.argsort(self.lin.evals.imag)
-        omega = self.lin.evals[index[i]]
-        v_omega = self.lin.evecs[:, index[i]]
-        
-        rho   = v_omega[0: nr]
-        phase = np.exp(-1j * np.angle(rho[0]))
-        rho    = epsilon * phase * rho
-        Br     = epsilon * phase * v_omega[1*nr: 2*nr]
-        Btheta = epsilon * phase * v_omega[2*nr: 3*nr]
-        Bz     = epsilon * phase * v_omega[3*nr: 4*nr]
-        Vr     = epsilon * phase * v_omega[4*nr: 5*nr]
-        Vtheta = epsilon * phase * v_omega[5*nr: 6*nr]
-        Vz     = epsilon * phase * v_omega[6*nr: 7*nr]
-        p      = epsilon * phase * v_omega[7*nr: 8*nr]
-        
         # def f1(x): return np.abs(x)
         # def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
         def f1(x): return np.real(x)
         def f2(x): return np.imag(x)
         
-        # Post-processing
-        rho_1  = np.reshape(rho, (nr, 1))
-        Br     = np.reshape(Br, (nr, 1))
-        B_1    = np.reshape(Btheta, (nr, 1))
-        Bz     = np.reshape(Bz, (nr, 1))  
-        Vr     = np.reshape(Vr, (nr, 1))
-        Vtheta = np.reshape(Vtheta, (nr, 1))
-        Vz     = np.reshape(Vz, (nr, 1))
-        B_Z1   = np.reshape(Bz, (nr, 1))
-        p_1    = np.reshape(p, (nr, 1))     
-        
-        rho    = rho_0 + rho_1
-        Btheta = B_0 + B_1
-        Bz     = B_Z0 * np.reshape(np.ones(nr), (nr, 1)) + B_Z1
-        p      = p_0 + p_1
-        
-        # d_rB_dr = fd.ddr(1) @ (rr * Btheta)
-        d_Bz_dr = fd.ddr(1) @ Bz    
-
-        Jr, Jtheta, Jz1 = self.lin.compute_currents(epsilon=epsilon)
-        Jz     = J_0 + Jz1
-        
-        Er_ideal     = Vz * Btheta - Vtheta * Bz
-        Etheta_ideal = Vr * Bz - Vz * Br
-        Ez_ideal     = Vtheta * Br - Vr * Btheta
-        
-        Er_resistive     = 4 * np.pi * D_eta / Const.c**2 * Jr
-        Etheta_resistive = 4 * np.pi * D_eta / Const.c**2 * Jtheta
-        Ez0_resistive    = 4 * np.pi * D_eta / Const.c**2 * J_0
-        Ez1_resistive    = 4 * np.pi * D_eta / Const.c**2 * Jz1
-        
-        Er0_hall    = 4 * np.pi * D_H / Const.c**2 / rho_0 * (-J_0 * B_0)
-        Er1_hall    = 4 * np.pi * D_H / Const.c**2 / rho * (Jtheta * Bz - Jz * Btheta) - 4 * np.pi * D_H / rho_0 * (-J_0 * B_0)
-        Etheta_hall = 4 * np.pi * D_H / Const.c**2 / rho * (Jz * Br - Jr * Bz)
-        Ez_hall     = 4 * np.pi * D_H / Const.c**2 / rho * (Jr * Btheta - Jtheta * Br)
-        
-        Er0_pressure    = -D_P / Const.c / rho_0 * (fd.ddr(1) @ p_0)
-        Er1_pressure    = -D_P / Const.c / rho * (fd.ddr(1) @ p) - Er0_pressure
-        Etheta_pressure = np.zeros(nr)
-        Ez_pressure     = -D_P / Const.c / rho * 1j * k * p_1
+        Jr, Jtheta, Jz1 = self.lin.compute_currents()
+        Jz = J_0 + Jz1
+        Er_ideal, Etheta_ideal, Ez_ideal = self.lin.compute_E_ideal()
+        Er_resistive, Etheta_resistive, Ez0_resistive, Ez1_resistive = self.lin.compute_E_resistive()
+        Er0_hall, Er1_hall, Etheta_hall, Ez_hall = self.lin.compute_E_hall()
+        Er0_pressure, Er1_pressure, Etheta_pressure, Ez_pressure = self.lin.compute_E_pressure()
         
         # 1D perturbations of J and E
         ax = plt.subplot(1,2,1)
