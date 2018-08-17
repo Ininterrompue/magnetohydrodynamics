@@ -14,7 +14,7 @@ lin.solve(num_modes=1)
 # evo.evolve_Euler(courant=0.8, t_max=0)
 # evo.evolve_WENO(courant=0.8, t_max=0)
 
-plots = Plot('Cylindrical', sys, equ_n, lin, evo)
+plots = Plot(sys, equ_n, lin, evo)
 # plots.plot_equilibrium()
 # plots.plot_eigenvalues()
 # plots.plot_VB()

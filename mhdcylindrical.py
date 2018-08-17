@@ -11,7 +11,7 @@ class AnalyticalEquilibriumCyl:
     def __init__(self, sys, p_exp):
         self.sys = sys
         self.p_exp = p_exp
-        self.n_ghost = self.sys.grid_r.n_ghost
+        # self.n_ghost = self.sys.grid_r.n_ghost
         self.p = self.compute_p()
         self.rho = self.compute_rho()
         self.b = self.compute_B()
@@ -53,7 +53,7 @@ class NumericalEquilibriumCyl:
     def __init__(self, sys, p_exp):
         self.sys = sys
         self.p_exp = p_exp
-        self.n_ghost = self.sys.grid_r.n_ghost
+        # self.n_ghost = self.sys.grid_r.n_ghost
         self.p = self.compute_p()
         self.rho = self.compute_rho()
         self.b = self.compute_b()
@@ -457,6 +457,7 @@ class EvolveCyl:
         z  = self.sys.grid_z.r
         zz = self.sys.grid_z.rr
         dr = self.sys.grid_r.dr
+        dz = self.sys.grid_z.dr
         D_eta   = self.sys.D_eta
         D_nu    = self.D_nu
         rosh    = self.rosh
@@ -484,6 +485,7 @@ class EvolveCyl:
             T_temp   = T.copy()
         
             self.dt = self.CFL(courant, B_temp, Vr_temp, Vz_temp, rho_temp, T_temp)
+            dt = self.dt
             if dt < 1e-9:
                 print('Solution has not converged')
                 break
@@ -497,38 +499,38 @@ class EvolveCyl:
             # Finite difference procedure                      
             rho[1: -1, 1: -1] = (rho_temp[1: -1, 1: -1] - dt / (2 * dr * rr[1: -1, 1: -1]) * (rr[2: , 1: -1] * rho_temp[2: , 1: -1] * Vr_temp[2: , 1: -1] 
                                                         - rr[: -2, 1: -1] * rho_temp[: -2, 1: -1] * Vr_temp[: -2, 1: -1])
-                                                        - dt / (2 * dr) * (rho_temp[1: -1, 2: ] * Vz_temp[1: -1, 2: ]
+                                                        - dt / (2 * dz) * (rho_temp[1: -1, 2: ] * Vz_temp[1: -1, 2: ]
                                                         - rho_temp[1: -1, : -2] * Vz_temp[1: -1, : -2]))
             B[1: -1, 1: -1] = (B_temp[1: -1, 1: -1] - dt / (2 * dr) * (Vr_temp[2: , 1: -1] * B_temp[2: , 1: -1] - Vr_temp[: -2, 1: -1] * B_temp[: -2, 1: -1])
-                                                    - dt / (2 * dr) * (Vz_temp[1: -1, 2: ] * B_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2] * B_temp[1: -1, : -2])
+                                                    - dt / (2 * dz) * (Vz_temp[1: -1, 2: ] * B_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2] * B_temp[1: -1, : -2])
                                                     + dt * D_eta * (1 / dr**2 * (B_temp[2:, 1: -1] - 2 * B_temp[1: -1, 1: -1] + B_temp[:-2, 1: -1])
                                                     + 1 / (rr[1: -1, 1: -1] * 2 * dr) * (B_temp[2:, 1: -1] - B_temp[:-2, 1: -1])
-                                                    + 1 / dr**2 * (B_temp[1: -1, 2:] - 2 * B_temp[1: -1, 1: -1] + B_temp[1: -1, :-2])
+                                                    + 1 / dz**2 * (B_temp[1: -1, 2:] - 2 * B_temp[1: -1, 1: -1] + B_temp[1: -1, :-2])
                                                     - B_temp[1: -1, 1: -1] / rr[1: -1, 1: -1]**2))
                                                     
             Vr[1: -1, 1: -1] = (Vr_temp[1: -1, 1: -1] - dt / (2 * dr) * Vr_temp[1: -1, 1: -1] * (Vr_temp[2: , 1: -1] - Vr_temp[: -2, 1: -1])
-                                                      - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (Vr_temp[1: -1, 2: ] - Vr_temp[1: -1, : -2]) 
+                                                      - dt / (2 * dz) * Vz_temp[1: -1, 1: -1] * (Vr_temp[1: -1, 2: ] - Vr_temp[1: -1, : -2]) 
                                                       - dt / (2 * dr * rho_temp[1: -1, 1: -1]) * (p_temp[2: , 1: -1] - p_temp[: -2, 1: -1]) 
                                                       - B_temp[1: -1, 1: -1] * dt / (4 * np.pi * rho_temp[1: -1, 1: -1] * rr[1: -1, 1: -1] * 2 * dr) 
                                                       * (rr[2: , 1: -1] * B_temp[2: , 1: -1] - rr[: -2, 1: -1] * B_temp[: -2, 1: -1])
                                                       + D_nu / rho_temp[1: -1, 1: -1] * (1 / dr**2 * (Vr_temp[2:, 1: -1] - 2 * Vr_temp[1: -1, 1: -1] + Vr_temp[:-2, 1: -1]) 
                                                       + 1 / (rr[1: -1, 1: -1] * 2 * dr) * (Vr_temp[2:, 1: -1] - Vr_temp[:-2, 1: -1])
-                                                      + 1 / dr**2 * (Vr_temp[1: -1, 2:] - 2 * Vr_temp[1: -1, 1: -1] + Vr_temp[1: -1, :-2]) 
+                                                      + 1 / dz**2 * (Vr_temp[1: -1, 2:] - 2 * Vr_temp[1: -1, 1: -1] + Vr_temp[1: -1, :-2]) 
                                                       - Vr_temp[1: -1, 1: -1] / rr[1: -1, 1: -1]**2))
                                                       
             Vz[1: -1, 1: -1] = (Vz_temp[1: -1, 1: -1] - dt / (2 * dr) * Vr_temp[1: -1, 1: -1] * (Vz_temp[2: , 1: -1] - Vz_temp[: -2, 1: -1])
-                                                      - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (Vz_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2])
-                                                      - dt / (2 * dr * rho_temp[1: -1, 1: -1]) * (p_temp[1: -1, 2: ] - p_temp[1: -1, : -2])
-                                                      - B_temp[1: -1, 1: -1] * dt / (4 * np.pi * rho_temp[1: -1, 1: -1] * 2 * dr) * (B_temp[1: -1, 2: ] - B_temp[1: -1, : -2])
+                                                      - dt / (2 * dz) * Vz_temp[1: -1, 1: -1] * (Vz_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2])
+                                                      - dt / (2 * dz * rho_temp[1: -1, 1: -1]) * (p_temp[1: -1, 2: ] - p_temp[1: -1, : -2])
+                                                      - B_temp[1: -1, 1: -1] * dt / (4 * np.pi * rho_temp[1: -1, 1: -1] * 2 * dz) * (B_temp[1: -1, 2: ] - B_temp[1: -1, : -2])
                                                       + D_nu / rho_temp[1: -1, 1: -1] * (1 / dr**2 * (Vz_temp[2:, 1: -1] - 2 * Vz_temp[1: -1, 1: -1] + Vz_temp[:-2, 1: -1])
                                                       + 1 / (rr[1: -1, 1: -1] * 2 * dr) * (Vz_temp[2:, 1: -1] - Vz_temp[:-2, 1: -1])
-                                                      + 1 / dr**2 * (Vz_temp[1: -1, 2:] - 2 * Vz_temp[1: -1, 1: -1] + Vz_temp[1: -1, :-2])))
+                                                      + 1 / dz**2 * (Vz_temp[1: -1, 2:] - 2 * Vz_temp[1: -1, 1: -1] + Vz_temp[1: -1, :-2])))
                                          
             p[1: -1, 1: -1] = (p_temp[1: -1, 1: -1] - dt / (2 * dr) * Vr_temp[1: -1, 1: -1] * (p_temp[2: , 1: -1] - p_temp[: -2, 1: -1]) 
-                                                    - dt / (2 * dr) * Vz_temp[1: -1, 1: -1] * (p_temp[1: -1, 2: ] - p_temp[1: -1, : -2])
+                                                    - dt / (2 * dz) * Vz_temp[1: -1, 1: -1] * (p_temp[1: -1, 2: ] - p_temp[1: -1, : -2])
                                - rosh * dt / (2 * dr) * p_temp[1: -1, 1: -1] / rr[1: -1, 1: -1] * (rr[2: , 1: -1] * Vr_temp[2: , 1: -1] - rr[: -2, 1: -1] * Vr_temp[: -2, 1: -1])
-                               - rosh * dt / (2 * dr) * p_temp[1: -1, 1: -1] * (Vz_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2])
-                               + (rosh - 1) * dt * (4 * np.pi * D_eta / Const.c**2) * ((1 / (2 * dr) * (B_temp[1: -1, 2:] - B_temp[1: -1, :-2]))**2
+                               - rosh * dt / (2 * dz) * p_temp[1: -1, 1: -1] * (Vz_temp[1: -1, 2: ] - Vz_temp[1: -1, : -2])
+                               + (rosh - 1) * dt * (4 * np.pi * D_eta / Const.c**2) * ((1 / (2 * dz) * (B_temp[1: -1, 2:] - B_temp[1: -1, :-2]))**2
                                + 1 / rr[1: -1, 1: -1]**2 * (1 / (2 * dr) * (rr[2:, 1: -1] * B_temp[2:, 1: -1] - rr[:-2, 1: -1] * B_temp[:-2, 1: -1]))**2))
             T[1: -1, 1: -1] = p[1: -1, 1: -1] / (2 * rho[1: -1, 1: -1])
             

@@ -122,8 +122,7 @@ class FDSystem:
 
         
 class Plot:
-    def __init__(self, coordinates, sys, equ, lin, evo):
-        self.coordinates = coordinates
+    def __init__(self, sys, equ, lin, evo):
         self.sys = sys
         self.equ = equ
         self.lin = lin
@@ -158,11 +157,11 @@ class Plot:
         p_0   = self.equ.p
         B_0   = self.equ.b
         B_Z0  = self.equ.sys.B_Z0
-        r = self.sys.grid_r.r
+        r  = self.sys.grid_r.r
         nr = self.sys.grid_r.nr
-        z = self.sys.grid_z.r
+        z  = self.sys.grid_z.r
         zz = self.sys.grid_z.rr
-        k = self.lin.k
+        k  = self.lin.k
         
         # def f1(x): return np.abs(x)
         # def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
