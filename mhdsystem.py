@@ -3,8 +3,17 @@ import matplotlib.pyplot as plt
 from scipy.sparse import dia_matrix
 
 
-# centimeters-MeV-nanoseconds
+# centimeters-eV-seconds
 class ConstCGS:
+    c   = 1e10
+    m_i = 1.04e-12
+    I   = 1e6 * 3e9 * 7.89e5
+    T_0 = 1e5 * 8.62e-5
+    r_0 = 1
+
+
+# centimeters-MeV-nanoseconds
+class ConstSpecial:
     c   = 30
     m_i = 1.04
 
@@ -163,6 +172,7 @@ class Plot:
         zz = self.sys.grid_z.rr
         k  = self.lin.k
         
+       
         # def f1(x): return np.abs(x)
         # def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
         def f1(x): return np.real(x)
@@ -219,6 +229,16 @@ class Plot:
         plt.show()
         
         # 2D contours
+        rho    = np.reshape(rho,    (nr, ))
+        Br     = np.reshape(Br,     (nr, ))
+        Btheta = np.reshape(Btheta, (nr, ))
+        Bz     = np.reshape(Bz,     (nr, ))
+        Vr     = np.reshape(Vr,     (nr, ))
+        Vtheta = np.reshape(Vtheta, (nr, ))
+        Vz     = np.reshape(Vz,     (nr, ))
+        p      = np.reshape(p,      (nr, ))
+        temp_1 = np.reshape(temp_1, (nr, ))
+
         z_osc = np.exp(1j * k * zz)
         rho_contour    = rho_0.T + f1(z_osc * rho)
         Br_contour     = f1(z_osc * Br)
