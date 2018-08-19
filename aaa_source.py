@@ -69,4 +69,5 @@ def apply_along_axis(func1d, axis, arr, flux, *args, **kwargs):
     else:
         # matrices have to be transposed first, because they collapse dimensions!
         out_arr = transpose(buff, buff_permute)
+        
         return res.__array_wrap__(out_arr)

@@ -7,7 +7,7 @@ sys   = System(n_ghost=1, resR=400, r_max=2*np.pi, resZ=400, z_max=2*np.pi, D_et
 equ_a = AnalyticalEquilibriumCyl(sys, p_exp=4)
 equ_n = NumericalEquilibriumCyl(sys, p_exp=4)
 lin = LinearCyl(equ_a, k=1, m=0, rosh=5/3)
-# evo = EvolveCyl(sys, equ_a, lin, k=1, rosh=2, D_nu=0)
+evo = EvolveCyl(sys, equ_a, lin, k=1, rosh=2, D_nu=0)
 
 
 lin.solve(num_modes=1)
