@@ -37,8 +37,17 @@ class ConstNorm:
     r_0 = 1
     P_0 = I**2 / (np.pi * r_0**2 * c**2)
 
+class ConstNorm2:
+    # cgs, with B0 = 20 T normalized to 1, mass normalized to m_i, T = 11605 K
+    c = 3e10
+    m_i = 1
+    I = 1e6 * 3e9
+    T_0 = 11605
+    r_0 = 1
+    P_0 = 1 / (4 * np.pi)
+
 # Select units
-Const = ConstNorm
+Const = ConstNorm2
 
 
 class System:

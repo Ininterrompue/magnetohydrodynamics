@@ -19,8 +19,8 @@ class AnalyticalEquilibriumCyl:
 
     def compute_p(self):
         # Initial pressure profile P = P0 * (0.05 * exp(-r^n))
-        p_0 = Const.I**2 / (np.pi * Const.r_0**2 * Const.c**2)
-        p = p_0 * (0.05 + np.exp(-self.sys.grid_r.rr**self.p_exp))
+        # p_0 = Const.I**2 / (np.pi * Const.r_0**2 * Const.c**2)
+        p = Const.P_0 * (0.05 + np.exp(-self.sys.grid_r.rr**self.p_exp))
         return p
 
     def compute_rho(self):
@@ -31,10 +31,10 @@ class AnalyticalEquilibriumCyl:
     def compute_B(self):
         n = self.p_exp
         rr = self.sys.grid_r.rr
-        p_0 = Const.I**2 / (np.pi * Const.r_0**2 * Const.c**2)
+        # p_0 = Const.I**2 / (np.pi * Const.r_0**2 * Const.c**2)
         
         # Magnetic pressure B^2/8pi
-        b_pressure = p_0 * (2 / (n * rr**2) * gamma(2 / n) * gammainc(2 / n, rr**n) - np.exp(-rr**n))
+        b_pressure = Const.P_0 * (2 / (n * rr**2) * gamma(2 / n) * gammainc(2 / n, rr**n) - np.exp(-rr**n))
         b = np.sqrt(8 * np.pi) * np.sign(b_pressure) * np.sqrt(np.abs(b_pressure))
         return b
 
