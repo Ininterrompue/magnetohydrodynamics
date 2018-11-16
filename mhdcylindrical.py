@@ -8,14 +8,16 @@ import time
 
         
 class AnalyticalEquilibriumCyl:
-    def __init__(self, sys, p_exp):
+    def __init__(self, sys, p_exp, v_exp):
         self.sys = sys
         self.p_exp = p_exp
+        self.v_exp = v_exp
         # self.n_ghost = self.sys.grid_r.n_ghost
         self.p = self.compute_p()
         self.rho = self.compute_rho()
-        self.b = self.compute_B()
-        self.j = self.compute_J()
+        self.b = self.compute_b()
+        self.j = self.compute_j()
+        self.v = self.compute_v()
 
     def compute_p(self):
         # Initial pressure profile P = P0 * (0.05 * exp(-r^n))
@@ -28,7 +30,7 @@ class AnalyticalEquilibriumCyl:
         rho = Const.m_i * self.p / (2 * Const.T_0)
         return rho
 
-    def compute_B(self):
+    def compute_b(self):
         n = self.p_exp
         rr = self.sys.grid_r.rr
         # p_0 = Const.I**2 / (np.pi * Const.r_0**2 * Const.c**2)
@@ -38,7 +40,7 @@ class AnalyticalEquilibriumCyl:
         b = np.sqrt(8 * np.pi) * np.sign(b_pressure) * np.sqrt(np.abs(b_pressure))
         return b
 
-    def compute_J(self):
+    def compute_j(self):
         n = self.p_exp
         rr = self.sys.grid_r.rr
         
@@ -47,17 +49,23 @@ class AnalyticalEquilibriumCyl:
         denom = np.sign(insqrt) * np.sqrt(np.abs(insqrt))
         j = Const.c / (4 * np.pi) * num / denom
         return j
+
+    def compute_v(self):
+        v = self.sys.V_Z0 * (np.exp(-self.sys.grid_r.rr**self.v_exp) - 0.5)
+        return v
         
 
 class NumericalEquilibriumCyl:
-    def __init__(self, sys, p_exp):
+    def __init__(self, sys, p_exp, v_exp):
         self.sys = sys
         self.p_exp = p_exp
+        self.v_exp = v_exp
         # self.n_ghost = self.sys.grid_r.n_ghost
         self.p = self.compute_p()
         self.rho = self.compute_rho()
         self.b = self.compute_b()
         self.j = self.compute_j()
+        self.v = self.compute_v()
     
     def compute_p(self):
         # Initial pressure profile P = P0 * (0.05 * exp(-r^n))
@@ -90,7 +98,11 @@ class NumericalEquilibriumCyl:
     def compute_j(self):  
         dv = self.sys.fd.ddr_product(self.sys.grid_r.rr)
         j = 1 / self.sys.grid_r.rr * (dv @ self.b) * Const.c / (4 * np.pi)
-        return j  
+        return j
+
+    def compute_v(self):
+        v = self.sys.V_Z0 * (np.exp(-self.sys.grid_r.rr**self.v_exp) - 0.5)
+        return v
         
 
 class LinearCyl:
@@ -118,6 +130,7 @@ class LinearCyl:
         rho = self.equ.rho
         p   = self.equ.p
         B   = self.equ.b
+        VZ  = self.equ.v
 
         D_eta = self.equ.sys.D_eta
         D_H   = self.equ.sys.D_H
@@ -126,12 +139,14 @@ class LinearCyl:
         rosh  = self.rosh
 
         # Ideal MHD
+        m_rho_rho    = fd.diag(k * VZ)
         m_rho_Vr     = -1j * fd.ddr_product(rr * rho) / rr
         m_rho_Vtheta = fd.diag(m * rho / rr)
         m_rho_Vz     = fd.diag(k * rho)
         
         m_Br_Vr = -B_Z0 * k * fd.diag_I() - fd.diag(m * B / rr)
 
+        m_Btheta_Btheta = fd.diag(k * VZ)
         m_Btheta_Vr     = -1j * fd.ddr_product(B)
         m_Btheta_Vtheta = -B_Z0 * k * fd.diag_I()
         m_Btheta_Vz     = fd.diag(k * B)
@@ -153,17 +168,16 @@ class LinearCyl:
         m_Vz_p      = fd.diag(k / rho)
         m_Vz_Btheta = fd.diag(k * B / (4 * np.pi * rho))
         m_Vz_Bz     = fd.diag(-m * B / (4 * np.pi * rho * rr))
-        
+
+        m_p_p  = fd.diag(k * VZ)
         m_p_Vr = fd.diag(-1j * (fd.ddr(1) @ p)) - rosh * 1j * p / rr * fd.ddr_product(rr)
         m_p_Vz = fd.diag(rosh * p * k)
        
         m0              = fd.zeros()
-        m_rho_rho       = fd.zeros()
         m_Br_Br         = fd.zeros()
         m_Br_Btheta     = fd.zeros()
         m_Btheta_rho    = fd.zeros()
         m_Btheta_Br     = fd.zeros()
-        m_Btheta_Btheta = fd.zeros()
         m_Btheta_Bz     = fd.zeros()
         m_Btheta_p      = fd.zeros()
         m_Bz_Br         = fd.zeros()
@@ -172,7 +186,6 @@ class LinearCyl:
         m_Vr_Vr         = fd.zeros()
         m_Vtheta_Vtheta = fd.zeros()
         m_Vz_Vz         = fd.zeros()
-        m_p_p           = fd.zeros()
         
         # Resistive term
         m_Br_Br         = m_Br_Br + D_eta * (1j / rr * fd.ddr(1) + 1j * fd.ddr(2) - fd.diag(1j * m**2 / rr**2 + 1j * k**2 + 1j / rr**2))
@@ -190,7 +203,7 @@ class LinearCyl:
         m_Btheta_Bz     = m_Btheta_Bz + D_H * ((-B_Z0 * k / rho) * fd.ddr(1))
         
         m_Bz_Br     = m_Bz_Br + D_H * (fd.diag(1j / (rho**2 * rr) * (fd.ddr(1) @ rho) * (fd.ddr(1) @ (rr * B)) - 1j / (rho * rr) * (fd.ddr(2) @ (rr * B)))
-                                   - 1j / (rho * rr) * (fd.ddr(1) @ (rr * B)) * fd.ddr(1))
+                                       - 1j / (rho * rr) * (fd.ddr(1) @ (rr * B)) * fd.ddr(1))
         # m_Bz_Br     = m_Bz_Br + D_H * (fd.diag(1j / (rho**2 * rr) * (fd.ddr(1) @ rho) * (fd.ddr(1) @ (rr * B))) - 1j / (rho * rr) * (fd.ddr_product(fd.ddr(1) @ (rr * B))))
         m_Bz_Btheta = m_Bz_Btheta + D_H * (B_Z0 * k / (rr * rho) * fd.ddr_product(rr) - fd.diag(k * B_Z0 / rho**2 * (fd.ddr(1) @ rho)))
         
@@ -237,7 +250,19 @@ class LinearCyl:
 
     def solve_for_gamma(self):
         return eigs(self.fd_operator, k=1, M=self.fd_rhs, sigma=1j, which='LI', return_eigenvectors=False).imag
-        
+
+    # Procedure to remove the highly oscillatory + growing (numerical?) modes
+    def remove_oscillatory(self):
+        evals = []
+        evecs = []
+        for i in range(len(self.evals)):
+            if np.abs(self.evals[i].real) < 30:
+                evals.append(self.evals[i])
+                evecs.append(self.evecs[:, i])
+        self.evals = np.asarray(evals)
+        self.evecs = np.asarray(evecs)
+        self.evecs = self.evecs.T
+
     # Procedure to only keep the growing and damping modes
     def remove_baddies(self):
         evals = []
@@ -314,20 +339,22 @@ class LinearCyl:
         rr = self.equ.sys.grid_r.rr
         nr = self.equ.sys.grid_r.nr
         zz = self.equ.sys.grid_z.rr
+        VZ = self.equ.v
         z_osc = np.exp(1j * self.k * zz)
         rho, Br, Btheta, Bz, Vr, Vtheta, Vz, p, temp, temp_1 = self.extract_from_evec(self.i, self.epsilon)
-        divV = 1 / rr * (fd.ddr(1) @ (rr * Vr)) + 1j * self.k * Vz
+        divV = 1 / rr * (fd.ddr(1) @ (rr * Vr)) + 1j * self.k * (VZ + Vz)
         divV = np.reshape(divV, (nr, ))
-        divV_contour = self.epsilon * np.real(z_osc[1: -1] * divV[1: -1])
+        divV_contour = self.epsilon * np.real(z_osc * divV)
         return divV_contour
 
     def compute_vort(self):
         fd = self.equ.sys.fd
         nr = self.equ.sys.grid_r.nr
         zz = self.equ.sys.grid_z.rr
+        VZ = self.equ.v
         z_osc = np.exp(1j * self.k * zz)
         rho, Br, Btheta, Bz, Vr, Vtheta, Vz, p, temp, temp_1 = self.extract_from_evec(self.i, self.epsilon)
-        vort_theta = np.reshape(1j * self.k * Vr - (fd.ddr(1) @ Vz), (nr, ))
+        vort_theta = np.reshape(1j * self.k * Vr - (fd.ddr(1) @ (VZ + Vz)), (nr, ))
         vort_theta[0: 2] = 0 # Removes edge effects
         vort_theta_contour = self.epsilon * np.real(z_osc * vort_theta)
         return vort_theta_contour

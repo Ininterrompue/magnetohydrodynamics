@@ -42,7 +42,7 @@ class ConstNorm2:
     c = 3e10
     m_i = 1
     I = 1e6 * 3e9
-    T_0 = 11605
+    T_0 = 1 # 11605 K
     r_0 = 1
     P_0 = 1 / (4 * np.pi)
 
@@ -51,7 +51,7 @@ Const = ConstNorm2
 
 
 class System:
-    def __init__(self, n_ghost=1, resR=64, r_max=2*np.pi, resZ=64, z_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0):
+    def __init__(self, n_ghost=1, resR=64, r_max=2*np.pi, resZ=64, z_max=2*np.pi, D_eta=0, D_H=0, D_P=0, B_Z0=0, V_Z0=0):
         self.grid_r = Grid(resR, n_ghost, r_max)
         self.grid_z = Grid(resZ, n_ghost, z_max)
         self.fd = FDSystem(self.grid_r)
@@ -61,6 +61,7 @@ class System:
         self.D_H = D_H
         self.D_P = D_P
         self.B_Z0 = B_Z0
+        self.V_Z0 = V_Z0
     
     
 class Grid:
@@ -174,14 +175,14 @@ class Plot:
         rho_0 = self.equ.rho
         p_0   = self.equ.p
         B_0   = self.equ.b
+        VZ_0  = self.equ.v
         B_Z0  = self.equ.sys.B_Z0
         r  = self.sys.grid_r.r
         nr = self.sys.grid_r.nr
         z  = self.sys.grid_z.r
         zz = self.sys.grid_z.rr
         k  = self.lin.k
-        
-       
+
         # def f1(x): return np.abs(x)
         # def f2(x): return np.unwrap(np.angle(x)) / (2 * np.pi)
         def f1(x): return np.real(x)
@@ -193,46 +194,46 @@ class Plot:
 #         ax = plt.subplot(3,3,1)
 #         ax.set_title('B_r')
 #         ax.plot(r[1: -1], f1(Br[1: -1]),
-#                 r[1: -1], f2(Br[1: -1]))  
-              
+#                 r[1: -1], f2(Br[1: -1]))
+
         ax = plt.subplot(2,3,1)
         ax.set_title('B_theta')
         ax.plot(r[1: -1], f1(Btheta[1: -1]),
                 r[1: -1], f2(Btheta[1: -1]))
-            
+
 #         ax = plt.subplot(3,3,3)
 #         ax.set_title('B_z')
 #         ax.plot(r[1: -1], f1(Bz[1: -1]),
-#                 r[1: -1], f2(Bz[1: -1]))    
-                    
+#                 r[1: -1], f2(Bz[1: -1]))
+
         ax = plt.subplot(2,3,2)
         ax.set_title('V_r')
         ax.plot(r[1: -1], f1(Vr[1: -1]),
                 r[1: -1], f2(Vr[1: -1]))
-            
+
 #         ax = plt.subplot(3,3,5)
 #         ax.set_title('V_theta')
 #         ax.plot(r[1: -1], f1(Vtheta[1: -1]),
 #                 r[1: -1], f2(Vtheta[1: -1]))
-           
+
         ax = plt.subplot(2,3,3)
-        ax.set_title('V_z')	
+        ax.set_title('V_z')
         ax.plot(r[1: -1], f1(Vz[1: -1]),
                 r[1: -1], f2(Vz[1: -1]))
-            
+
         ax = plt.subplot(2,3,4)
         ax.set_title('rho')
         ax.plot(r[1: -1], f1(rho[1: -1]),
                 r[1: -1], f2(rho[1: -1]))
-                
+
         ax = plt.subplot(2,3,5)
         ax.set_title('P')
         ax.plot(r[1: -1], f1(p[1: -1]),
                 r[1: -1], f2(p[1: -1]))
-                
+
         ax = plt.subplot(2,3,6)
         ax.set_title('T')
-        ax.plot(r[1: -1], f1(temp[1: -1]) - Const.T_0, 
+        ax.plot(r[1: -1], f1(temp[1: -1]) - Const.T_0,
                 r[1: -1], f2(temp[1: -1]))
 
         plt.show()
@@ -249,20 +250,20 @@ class Plot:
         temp_1 = np.reshape(temp_1, (nr, ))
 
         z_osc = np.exp(1j * k * zz)
-        rho_contour    = rho_0.T + f1(z_osc * rho)
+        rho_contour    = (rho_0.T + f1(z_osc * rho))
         Br_contour     = f1(z_osc * Br)
         Btheta_contour = B_0.T + f1(z_osc * Btheta)
         Bz_contour     = (B_Z0 * np.ones(nr)).T + f1(z_osc * Bz)
         Vr_contour     = f1(z_osc * Vr)
         Vtheta_contour = f1(z_osc * Vtheta)
-        Vz_contour     = f1(z_osc * Vz)
+        Vz_contour     = VZ_0.T + f1(z_osc * Vz)
         p_contour      = p_0.T + f1(z_osc * p)
         temp_contour   = Const.T_0 + f1(z_osc * temp_1)
         
         f = plt.figure()
         f.suptitle('Fastest growing mode')
-        R, Z = np.meshgrid(r[1: -1], z[1: -1])
-    
+        R, Z = np.meshgrid(r[1: nr//2], z[1: -1])
+
 #         ax = plt.subplot(3,3,1)
 #         ax.set_title('B_r')
 #         plot_1 = ax.contourf(R, Z, Br_contour, 20)
@@ -270,76 +271,75 @@ class Plot:
     
         ax = plt.subplot(2,3,1)
         ax.set_title('B_theta')
-        plot_2 = ax.contourf(R, Z, Btheta_contour[1: -1, 1: -1], 20)
+        plot_2 = ax.contourf(R, Z, Btheta_contour[1: -1, 1: nr//2], 20)
         plt.colorbar(plot_2)
-    
+
 #         ax = plt.subplot(3,3,3)
 #         ax.set_title('B_z')
 #         plot_3 = ax.contourf(R, Z, Bz_contour, 20)
 #         plt.colorbar(plot_3)
-    
+
         ax = plt.subplot(2,3,2)
         ax.set_title('V_r')
-        plot_4 = ax.contourf(R, Z, Vr_contour[1: -1, 1: -1], 20)
+        plot_4 = ax.contourf(R, Z, Vr_contour[1: -1, 1: nr//2], 20)
         plt.colorbar(plot_4)
-        
+
 #         ax = plt.subplot(3,3,5)
 #         ax.set_title('V_theta')
 #         plot_5 = ax.contourf(R, Z, Vtheta_contour, 20)
 #         plt.colorbar(plot_5)
-    
+
         ax = plt.subplot(2,3,3)
         ax.set_title('V_z')
-        plot_6 = ax.contourf(R, Z, Vz_contour[1: -1, 1: -1], 20)
+        plot_6 = ax.contourf(R, Z, Vz_contour[1: -1, 1: nr//2], 20)
         plt.colorbar(plot_6)
-    
+
         ax = plt.subplot(2,3,4)
         ax.set_title('rho')
-        plot_7 = ax.contourf(R, Z, rho_contour[1: -1, 1: -1], 20)
+        plot_7 = ax.contourf(R, Z, rho_contour[1: -1, 1: nr//2], 20)
         plt.colorbar(plot_7)
-        
+
         ax = plt.subplot(2,3,5)
         ax.set_title('P')
-        plot_8 = ax.contourf(R, Z, p_contour[1: -1, 1: -1], 20)
+        plot_8 = ax.contourf(R, Z, p_contour[1: -1, 1: nr//2], 20)
         plt.colorbar(plot_8)
-        
+
         ax = plt.subplot(2,3,6)
         ax.set_title('T')
-        plot_9 = ax.contourf(R, Z, temp_contour[1: -1, 1: -1], 20)
+        plot_9 = ax.contourf(R, Z, temp_contour[1: -1, 1: nr//2], 20)
         plt.colorbar(plot_9)
-    
+
         plt.show()
         
         # Vorticity
         vort_theta_contour = self.lin.compute_vort()
         
-        plot = plt.contourf(R, Z, 1e3 * vort_theta_contour[1: -1, 1: -1], 200, cmap='coolwarm')
+        plot = plt.contourf(R, Z, 1e3 * vort_theta_contour[1: -1, 1: nr//2], 200, cmap='coolwarm')
         plt.colorbar(plot)
         
-        d_vec = 15
+        d_vec = 8
         plt.title('Flow velocity and vorticity')
         plt.xlabel('r')
         plt.ylabel('z')
-        quiv = plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
-                   Vr_contour[::d_vec, ::d_vec], Vz_contour[::d_vec, ::d_vec], 
-                   pivot='mid', width=0.002, scale=0.1)
+        Vr_view = Vr_contour[1: -1, 1: nr//2]
+        Vz_view = Vz_contour[1: -1, 1: nr//2]
+        quiv = plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec],
+                          Vr_view[::d_vec, ::d_vec], Vz_view[::d_vec, ::d_vec],
+                          pivot='mid', width=0.003, scale=0.2)
         plt.show()
         
         # Divergence of V
         divV_contour = self.lin.compute_divV()
-        
-#         elif coordinates == 'Cartesian':
-#             divV = (fd.ddr(1) @ Vr) + 1j * k * Vz
 
         plt.title('Streamlines and div V')
         plt.xlabel('r')
         plt.ylabel('z')
-        plot = plt.contourf(R, Z, 1e4 * divV_contour, 200, cmap='coolwarm')
+        plot = plt.contourf(R, Z, 1e3 * divV_contour[1: -1, 1: nr//2], 200, cmap='coolwarm')
         plt.colorbar(plot)
-        quiv = plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
-                   Vr_contour[::d_vec, ::d_vec], Vz_contour[::d_vec, ::d_vec], 
-                   pivot='mid', width=0.002, scale=0.1)
-        strm = plt.streamplot(r[1:-1], z[1:-1], Vr_contour[1: -1, 1:-1], Vz_contour[1:-1, 1:-1], 
+        quiv = plt.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec],
+                   Vr_view[::d_vec, ::d_vec], Vz_view[::d_vec, ::d_vec],
+                   pivot='mid', width=0.003, scale=0.2)
+        strm = plt.streamplot(r[1: nr//2], z[1: -1], Vr_view, Vz_view,
                    linewidth=0.5, arrowsize=0.001, density=2, color='black')
         plt.show()
 
@@ -617,9 +617,11 @@ class Plot:
         
         ax = plt.subplot(2,2,4)
         ax.set_title('E_total')
-        ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec], 
-                   Er_ideal_contour[::d_vec, ::d_vec] + Er_resistive_contour[::d_vec, ::d_vec] + Er_hall_contour[::d_vec, ::d_vec] + Er_pressure_contour[::d_vec, ::d_vec], 
-                   Ez_ideal_contour[::d_vec, ::d_vec] + Ez_resistive_contour[::d_vec, ::d_vec] + Ez_hall_contour[::d_vec, ::d_vec] + Ez_pressure_contour[::d_vec, ::d_vec], 
+        ax.quiver(R[::d_vec, ::d_vec], Z[::d_vec, ::d_vec],
+                  Er_ideal_contour[::d_vec, ::d_vec] + Er_resistive_contour[::d_vec, ::d_vec] +
+                  Er_hall_contour[::d_vec, ::d_vec] + Er_pressure_contour[::d_vec, ::d_vec],
+                  Ez_ideal_contour[::d_vec, ::d_vec] + Ez_resistive_contour[::d_vec, ::d_vec] +
+                  Ez_hall_contour[::d_vec, ::d_vec] + Ez_pressure_contour[::d_vec, ::d_vec],
                    pivot='mid', width=0.002, scale=30)
         plt.show()
         
@@ -678,17 +680,3 @@ class Plot:
                    Vr[::d_vec, ::d_vec].T, Vz[::d_vec, ::d_vec].T, 
                    pivot='mid', width=0.002, scale=100)
         plt.show() 
-    
-    
-      
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
